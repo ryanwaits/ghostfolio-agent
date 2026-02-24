@@ -338,6 +338,24 @@ enum Provider {
   OIDC
 }
 
+model AgentChatLog {
+  id               String   @id @default(uuid())
+  requestId        String   @unique
+  userId           String
+  latencyMs        Int
+  totalSteps       Int
+  toolsUsed        String[] @default([])
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  totalTokens      Int      @default(0)
+  errorOccurred    Boolean  @default(false)
+  errorMessage     String?
+  createdAt        DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
 enum Role {
   ADMIN
   DEMO
