@@ -2,7 +2,7 @@ services:
   - type: web
     name: ghostfolio
     runtime: docker
-    plan: starter
+    plan: standard
     region: oregon
     healthCheckPath: /api/v1/health
     envVars:
