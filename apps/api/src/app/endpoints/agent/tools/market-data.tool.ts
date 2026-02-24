@@ -32,8 +32,8 @@ export function createMarketDataTool({
                 'YAHOO'
               ])
               .optional()
-              .default('YAHOO')
-              .describe('Data source. Defaults to YAHOO.')
+              .default('FINANCIAL_MODELING_PREP')
+              .describe('Data source. Defaults to FINANCIAL_MODELING_PREP.')
           })
         )
         .min(1)
@@ -42,7 +42,7 @@ export function createMarketDataTool({
     }),
     execute: async ({ symbols }) => {
       try {
-        const items = symbols.map(({ symbol, dataSource = 'YAHOO' }) => ({
+        const items = symbols.map(({ symbol, dataSource = 'FINANCIAL_MODELING_PREP' }) => ({
           dataSource: dataSource as DataSource,
           symbol: symbol.toUpperCase()
         }));
