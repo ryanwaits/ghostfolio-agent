@@ -20,6 +20,7 @@ COPY ./package.json package.json
 COPY ./package-lock.json package-lock.json
 COPY ./.npmrc .npmrc
 COPY ./prisma/schema.prisma prisma/
+COPY ./scripts scripts/
 
 RUN npm install
 
