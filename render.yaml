@@ -40,6 +40,14 @@ services:
           property: database
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: API_KEY_FINANCIAL_MODELING_PREP
+        sync: false
+      - key: DATA_SOURCES
+        value: '["FINANCIAL_MODELING_PREP","COINGECKO","MANUAL"]'
+      - key: DATA_SOURCE_EXCHANGE_RATES
+        value: FINANCIAL_MODELING_PREP
+      - key: DATA_SOURCE_IMPORT
+        value: FINANCIAL_MODELING_PREP
       - key: NODE_ENV
         value: production
 
