@@ -25,10 +25,7 @@ services:
           type: redis
           property: port
       - key: REDIS_PASSWORD
-        fromService:
-          name: ghostfolio-redis
-          type: redis
-          property: password
+        value: ""
       - key: POSTGRES_USER
         fromDatabase:
           name: ghostfolio-db
