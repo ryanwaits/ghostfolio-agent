@@ -52,7 +52,7 @@ services:
 
 databases:
   - name: ghostfolio-db
-    plan: starter
+    plan: basic-1gb
     region: oregon
     databaseName: ghostfolio
     user: ghostfolio
