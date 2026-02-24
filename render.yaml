@@ -55,7 +55,7 @@ services:
     name: ghostfolio-redis
     plan: starter
     region: oregon
-    maxmemoryPolicy: allkeys-lru
+    maxmemoryPolicy: volatile-lru
     ipAllowList: []
 
 databases:
