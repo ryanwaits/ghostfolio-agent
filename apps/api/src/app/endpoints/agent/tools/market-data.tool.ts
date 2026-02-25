@@ -11,14 +11,16 @@ export function createMarketDataTool({
 }) {
   return tool({
     description:
-      'Get current market price and quote data for one or more symbols. Use when the user asks about current prices, market status, or wants to look up a ticker.',
+      'Get current market price and quote data for one or more symbols. Requires the exact symbol and dataSource. For stocks/ETFs use dataSource "YAHOO" with uppercase ticker (e.g. "AAPL"). For crypto use dataSource "COINGECKO" with the exact CoinGecko slug — IMPORTANT: only use "bitcoin", "ethereum", or "solana" directly; for all other crypto you MUST call symbol_search first to get the correct slug.',
     inputSchema: z.object({
       symbols: z
         .array(
           z.object({
             symbol: z
               .string()
-              .describe('Ticker symbol (e.g. AAPL, MSFT, BTC-USD)'),
+              .describe(
+                'The exact symbol. For YAHOO: uppercase ticker (e.g. "AAPL"). For COINGECKO: exact lowercase slug from symbol_search (e.g. "bitcoin", "blockstack").'
+              ),
             dataSource: z
               .enum([
                 'ALPHA_VANTAGE',
@@ -32,8 +34,10 @@ export function createMarketDataTool({
                 'YAHOO'
               ])
               .optional()
-              .default('FINANCIAL_MODELING_PREP')
-              .describe('Data source. Defaults to FINANCIAL_MODELING_PREP.')
+              .default('YAHOO')
+              .describe(
+                'Data source. Use "COINGECKO" for cryptocurrencies, "YAHOO" for stocks/ETFs. Defaults to YAHOO.'
+              )
           })
         )
         .min(1)
@@ -42,9 +46,12 @@ export function createMarketDataTool({
     }),
     execute: async ({ symbols }) => {
       try {
-        const items = symbols.map(({ symbol, dataSource = 'FINANCIAL_MODELING_PREP' }) => ({
+        const items = symbols.map(({ symbol, dataSource = 'YAHOO' }) => ({
           dataSource: dataSource as DataSource,
-          symbol: symbol.toUpperCase()
+          symbol:
+            dataSource === 'COINGECKO'
+              ? symbol.toLowerCase()
+              : symbol.toUpperCase()
         }));
 
         const quotes = await dataProviderService.getQuotes({ items });
@@ -57,7 +64,9 @@ export function createMarketDataTool({
           dataSource: data.dataSource
         }));
       } catch (error) {
-        return { error: `Failed to fetch market data: ${error instanceof Error ? error.message : 'unknown error'}` };
+        return {
+          error: `Failed to fetch market data: ${error instanceof Error ? error.message : 'unknown error'}`
+        };
       }
     }
   });

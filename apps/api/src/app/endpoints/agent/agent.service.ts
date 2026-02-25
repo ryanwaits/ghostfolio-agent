@@ -3,8 +3,8 @@ import { PortfolioService } from '@ghostfolio/api/app/portfolio/portfolio.servic
 import { UserService } from '@ghostfolio/api/app/user/user.service';
 import { DataProviderService } from '@ghostfolio/api/services/data-provider/data-provider.service';
 
-import { Injectable, Logger } from '@nestjs/common';
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { Injectable, Logger } from '@nestjs/common';
 import { stepCountIs, streamText, type ModelMessage, type UIMessage } from 'ai';
 import { randomUUID } from 'node:crypto';
 
@@ -13,6 +13,7 @@ import { createHoldingsLookupTool } from './tools/holdings.tool';
 import { createMarketDataTool } from './tools/market-data.tool';
 import { createPortfolioPerformanceTool } from './tools/performance.tool';
 import { createPortfolioAnalysisTool } from './tools/portfolio.tool';
+import { createSymbolSearchTool } from './tools/symbol-search.tool';
 import { createTransactionHistoryTool } from './tools/transactions.tool';
 
 const SYSTEM_PROMPT = `You are a financial analysis assistant powered by Ghostfolio. You help users understand their investment portfolio through data-driven insights.
@@ -24,7 +25,15 @@ RULES:
 - If a tool call fails, tell the user honestly rather than guessing.
 - Be concise and data-focused. Use tables and bullet points for clarity.
 - When presenting monetary values, use the user's base currency.
-- When presenting percentages, round to 2 decimal places.`;
+- When presenting percentages, round to 2 decimal places.
+
+MARKET DATA LOOKUPS:
+- For stocks and ETFs: use dataSource "YAHOO" with uppercase ticker symbols (e.g. "AAPL", "TSLA", "MSFT").
+- For cryptocurrencies: use dataSource "COINGECKO" with the CoinGecko lowercase slug ID. Do NOT use ticker symbols like "BTC" or "STX" with CoinGecko — use the full lowercase slug.
+- Well-known CoinGecko slugs you can use directly: "bitcoin", "ethereum", "solana".
+- For ANY other cryptocurrency, use the symbol_search tool first to find the correct CoinGecko slug. CoinGecko slugs are often non-obvious (e.g. "blockstack" for Stacks, "avalanche-2" for Avalanche, "matic-network" for Polygon).
+- If symbol_search returns multiple matches, present the options to the user and let them choose before calling market_data.
+- If unsure whether something is a crypto or stock, use symbol_search to find out.`;
 
 @Injectable()
 export class AgentService {
@@ -77,13 +86,18 @@ export class AgentService {
         market_data: createMarketDataTool({
           dataProviderService: this.dataProviderService
         }),
+        symbol_search: createSymbolSearchTool({
+          dataProviderService: this.dataProviderService,
+          userService: this.userService,
+          userId
+        }),
         transaction_history: createTransactionHistoryTool({
           orderService: this.orderService,
           userService: this.userService,
           userId
         })
       },
-      stopWhen: stepCountIs(5),
+      stopWhen: stepCountIs(6),
       onStepFinish: ({ toolCalls, usage, finishReason, stepNumber }) => {
         const toolNames = toolCalls.map((tc) => tc.toolName);
         this.logger.log(
@@ -151,8 +165,10 @@ export class AgentService {
           latencyMs,
           totalSteps: steps.length,
           toolsUsed: uniqueTools,
-          promptTokens: (usage as any).promptTokens ?? (usage as any).inputTokens ?? 0,
-          completionTokens: (usage as any).completionTokens ?? (usage as any).outputTokens ?? 0,
+          promptTokens:
+            (usage as any).promptTokens ?? (usage as any).inputTokens ?? 0,
+          completionTokens:
+            (usage as any).completionTokens ?? (usage as any).outputTokens ?? 0,
           totalTokens: usage.totalTokens ?? 0,
           timestamp: Date.now()
         });
