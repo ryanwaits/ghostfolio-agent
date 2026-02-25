@@ -58,4 +58,4 @@ jobs:
           API_BASE: ${{ inputs.api_base || secrets.RENDER_URL }}
           TEST_USER_ACCESS_TOKEN: ${{ secrets.TEST_USER_ACCESS_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: COLUMNS=200 npx evalite run --threshold 100 evals/golden/agent-golden.eval.ts
+        run: npx evalite run --threshold 100 evals/golden/agent-golden.eval.ts

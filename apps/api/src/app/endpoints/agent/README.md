@@ -25,7 +25,7 @@ AI-powered portfolio assistant built as a NestJS module inside the Ghostfolio fo
 
 | Tool                    | Description                                                                                                                                               |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `symbol_search`         | Disambiguate crypto vs stock symbols, find correct CoinGecko slugs or Yahoo tickers. Use before `market_data` for any non-obvious crypto.                |
+| `symbol_search`         | Disambiguate crypto vs stock symbols, find correct CoinGecko slugs or Yahoo tickers. Use before `market_data` for any non-obvious crypto.                 |
 | `portfolio_analysis`    | Holdings, allocations, total value, account breakdown                                                                                                     |
 | `portfolio_performance` | Returns, net performance, chart data over a date range                                                                                                    |
 | `holdings_lookup`       | Deep dive on a single position (dividends, fees, sectors, countries)                                                                                      |
@@ -57,10 +57,10 @@ All tools wrapped in try/catch -- errors returned to LLM as `{ error: ... }` so 
 
 ```bash
 # Run golden set (requires ANTHROPIC_API_KEY + TEST_USER_ACCESS_TOKEN in env)
-COLUMNS=200 npx evalite run evals/golden/agent-golden.eval.ts
+npx evalite run evals/golden/agent-golden.eval.ts
 
 # Run scenarios
-COLUMNS=200 npx evalite run evals/scenarios/agent-scenarios.eval.ts
+npx evalite run evals/scenarios/agent-scenarios.eval.ts
 ```
 
 ## CI Pipeline
@@ -83,15 +83,15 @@ COLUMNS=200 npx evalite run evals/scenarios/agent-scenarios.eval.ts
 
 **Render env vars**:
 
-| Var                              | Required | Notes                                                                                        |
-| -------------------------------- | -------- | -------------------------------------------------------------------------------------------- |
-| `ANTHROPIC_API_KEY`              | Yes      | Powers the agent LLM                                                                         |
-| `API_KEY_FINANCIAL_MODELING_PREP`| Yes      | Primary data provider for stocks/ETFs                                                        |
-| `API_KEY_COINGECKO_DEMO`        | Yes      | Free demo key from [CoinGecko](https://www.coingecko.com/en/api/pricing) -- 30 calls/min     |
-| `DATA_SOURCES`                   | Yes      | `["FINANCIAL_MODELING_PREP","COINGECKO","MANUAL"]`                                           |
-| `DATA_SOURCE_EXCHANGE_RATES`     | Yes      | `FINANCIAL_MODELING_PREP`                                                                    |
-| `DATA_SOURCE_IMPORT`             | Yes      | `FINANCIAL_MODELING_PREP`                                                                    |
-| `NODE_ENV`                       | Yes      | `production`                                                                                 |
+| Var                               | Required | Notes                                                                                    |
+| --------------------------------- | -------- | ---------------------------------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`               | Yes      | Powers the agent LLM                                                                     |
+| `API_KEY_FINANCIAL_MODELING_PREP` | Yes      | Primary data provider for stocks/ETFs                                                    |
+| `API_KEY_COINGECKO_DEMO`          | Yes      | Free demo key from [CoinGecko](https://www.coingecko.com/en/api/pricing) -- 30 calls/min |
+| `DATA_SOURCES`                    | Yes      | `["FINANCIAL_MODELING_PREP","COINGECKO","MANUAL"]`                                       |
+| `DATA_SOURCE_EXCHANGE_RATES`      | Yes      | `FINANCIAL_MODELING_PREP`                                                                |
+| `DATA_SOURCE_IMPORT`              | Yes      | `FINANCIAL_MODELING_PREP`                                                                |
+| `NODE_ENV`                        | Yes      | `production`                                                                             |
 
 **Endpoints**:
 
@@ -189,7 +189,7 @@ curl http://localhost:3333/api/v1/auth/anonymous/$TEST_USER_ACCESS_TOKEN
 open http://localhost:3333/api/v1/agent/ui
 
 # 8. Run golden evals (requires ANTHROPIC_API_KEY + TEST_USER_ACCESS_TOKEN in env)
-COLUMNS=200 TEST_USER_ACCESS_TOKEN=<token> \
+TEST_USER_ACCESS_TOKEN=<token> \
   npx evalite run evals/golden/agent-golden.eval.ts
 
 # 9. Eval dashboard (http://localhost:3006)
@@ -232,14 +232,14 @@ Metrics snapshot (production, 1h window):
 
 ### MVP Checklist
 
-| #   | Requirement                             | Status | Evidence                                                                                              |
-| --- | --------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------- |
-| 1   | Agent responds to natural language      | PASS   | All 6 tools return coherent natural language responses                                                |
+| #   | Requirement                             | Status | Evidence                                                                                                             |
+| --- | --------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------- |
+| 1   | Agent responds to natural language      | PASS   | All 6 tools return coherent natural language responses                                                               |
 | 2   | 3+ functional tools                     | PASS   | 6 tools: symbol_search, portfolio_analysis, portfolio_performance, holdings_lookup, market_data, transaction_history |
-| 3   | Tool calls execute + structured results | PASS   | Tools return tables, dollar amounts, percentages                                                      |
-| 4   | Agent synthesizes tool results          | PASS   | Combines tool data into markdown tables, summaries, key takeaways                                     |
-| 5   | Conversation history across turns       | PASS   | "What is its current price?" correctly resolved to VOO from prior turn                                |
-| 6   | Basic error handling                    | PASS   | 401 on bad auth, tool errors caught, clean 500s                                                       |
-| 7   | Domain-specific verification            | PASS   | Rejects trades ("read-only"), rejects advice, rejects role-play                                       |
-| 8   | 5+ eval test cases                      | PASS   | 18 golden (100%) + 30 scenarios                                                                       |
-| 9   | Deployed + publicly accessible          | PASS   | https://ghostfolio-4eid.onrender.com, health OK                                                       |
+| 3   | Tool calls execute + structured results | PASS   | Tools return tables, dollar amounts, percentages                                                                     |
+| 4   | Agent synthesizes tool results          | PASS   | Combines tool data into markdown tables, summaries, key takeaways                                                    |
+| 5   | Conversation history across turns       | PASS   | "What is its current price?" correctly resolved to VOO from prior turn                                               |
+| 6   | Basic error handling                    | PASS   | 401 on bad auth, tool errors caught, clean 500s                                                                      |
+| 7   | Domain-specific verification            | PASS   | Rejects trades ("read-only"), rejects advice, rejects role-play                                                      |
+| 8   | 5+ eval test cases                      | PASS   | 18 golden (100%) + 30 scenarios                                                                                      |
+| 9   | Deployed + publicly accessible          | PASS   | https://ghostfolio-4eid.onrender.com, health OK                                                                      |
