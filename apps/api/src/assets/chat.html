@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AgentForge - Portfolio Assistant</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -41,7 +44,6 @@
       max-width: 720px;
       line-height: 1.6;
       font-size: 14px;
-      white-space: pre-wrap;
       word-wrap: break-word;
     }
     .msg.user {
@@ -49,8 +51,10 @@
       background: #1a3a5c;
       padding: 12px 16px;
       border-radius: 16px 16px 4px 16px;
+      white-space: pre-wrap;
     }
     .msg.assistant { align-self: flex-start; color: #d4d4d4; }
+    .msg.assistant.streaming { white-space: pre-wrap; }
     .msg.error { color: #ef4444; font-size: 13px; }
     .tool-call {
       font-size: 12px;
@@ -58,6 +62,77 @@
       padding: 4px 0;
       font-style: italic;
     }
+
+    /* Markdown styles for assistant messages */
+    .msg.assistant p { margin: 0 0 12px 0; }
+    .msg.assistant p:last-child { margin-bottom: 0; }
+    .msg.assistant ul, .msg.assistant ol { margin: 0 0 12px 20px; }
+    .msg.assistant li { margin: 4px 0; }
+    .msg.assistant h1, .msg.assistant h2, .msg.assistant h3,
+    .msg.assistant h4, .msg.assistant h5, .msg.assistant h6 {
+      color: #fafafa;
+      margin: 16px 0 8px 0;
+    }
+    .msg.assistant h1:first-child, .msg.assistant h2:first-child,
+    .msg.assistant h3:first-child { margin-top: 0; }
+    .msg.assistant h1 { font-size: 18px; }
+    .msg.assistant h2 { font-size: 16px; }
+    .msg.assistant h3 { font-size: 15px; }
+    .msg.assistant code {
+      background: #1e1e1e;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+    }
+    .msg.assistant pre {
+      background: #1e1e1e;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 8px 0 12px 0;
+      overflow-x: auto;
+    }
+    .msg.assistant pre code {
+      background: none;
+      padding: 0;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .msg.assistant blockquote {
+      border-left: 3px solid #404040;
+      padding-left: 12px;
+      color: #a3a3a3;
+      margin: 8px 0 12px 0;
+    }
+    .msg.assistant table {
+      border-collapse: collapse;
+      margin: 8px 0 12px 0;
+      font-size: 13px;
+      width: 100%;
+    }
+    .msg.assistant th, .msg.assistant td {
+      border: 1px solid #2a2a2a;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    .msg.assistant th {
+      background: #1a1a1a;
+      color: #fafafa;
+      font-weight: 600;
+    }
+    .msg.assistant hr {
+      border: none;
+      border-top: 1px solid #2a2a2a;
+      margin: 16px 0;
+    }
+    .msg.assistant a {
+      color: #60a5fa;
+      text-decoration: none;
+    }
+    .msg.assistant a:hover { text-decoration: underline; }
+    .msg.assistant strong { color: #fafafa; }
+
     #input-area {
       padding: 16px 24px;
       border-top: 1px solid #262626;
@@ -105,6 +180,16 @@
     <button id="send">Send</button>
   </div>
   <script>
+    marked.setOptions({
+      highlight: function(code, lang) {
+        if (lang && hljs.getLanguage(lang)) {
+          return hljs.highlight(code, { language: lang }).value;
+        }
+        return hljs.highlightAuto(code).value;
+      },
+      breaks: true
+    });
+
     var API_BASE = window.location.origin;
     var messagesEl = document.getElementById("messages");
     var inputEl = document.getElementById("input");
@@ -162,6 +247,7 @@
       conversation.push({ role: "user", content: text });
 
       var el = addMsg("assistant", "");
+      el.classList.add("streaming");
       var full = "";
 
       try {
@@ -211,7 +297,13 @@
           messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
-        if (full) conversation.push({ role: "assistant", content: full });
+        // Render final markdown
+        if (full) {
+          el.classList.remove("streaming");
+          el.innerHTML = marked.parse(full);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+          conversation.push({ role: "assistant", content: full });
+        }
       } catch (err) {
         addMsg("error", "Error: " + esc(err.message));
       }
