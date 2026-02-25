@@ -53,7 +53,7 @@ services:
 
   - type: redis
     name: ghostfolio-redis
-    plan: starter
+    plan: standard
     region: oregon
     maxmemoryPolicy: volatile-lru
     ipAllowList: []

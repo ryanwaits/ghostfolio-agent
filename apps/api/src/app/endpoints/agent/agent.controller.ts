@@ -26,10 +26,7 @@ import { join } from 'node:path';
 import { AgentMetricsService } from './agent-metrics.service';
 import { AgentService } from './agent.service';
 
-const chatHtml = readFileSync(
-  join(__dirname, 'assets', 'chat.html'),
-  'utf-8'
-);
+const chatHtml = readFileSync(join(__dirname, 'assets', 'chat.html'), 'utf-8');
 
 @Controller('agent')
 export class AgentController {
@@ -64,7 +61,10 @@ export class AgentController {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
 
-      this.logger.error(`Chat failed: ${message}`, error instanceof Error ? error.stack : undefined);
+      this.logger.error(
+        `Chat failed: ${message}`,
+        error instanceof Error ? error.stack : undefined
+      );
 
       this.agentMetricsService.record({
         requestId: 'error-' + Date.now(),
@@ -102,7 +102,7 @@ export class AgentController {
 }
 
 function parseDuration(input: string): number | undefined {
-  const match = input.match(/^(\d+)(m|h|d)$/);
+  const match = /^(\d+)(m|h|d)$/.exec(input);
 
   if (!match) return undefined;
 
