@@ -1,10 +1,17 @@
 # Agent Module
 
-AI-powered portfolio assistant built as a NestJS module inside the Ghostfolio fork. Sonnet 4.6 with 5 tools, SSE streaming, structured observability, 2-tier eval suite, and CI-gated golden tests.
+AI-powered portfolio assistant built as a NestJS module inside the Ghostfolio fork. Sonnet 4.6 with 6 tools, SSE streaming, structured observability, 2-tier eval suite, and CI-gated golden tests.
 
 **Live**: https://ghostfolio-4eid.onrender.com/api/v1/agent/ui
 
 ---
+
+## Prerequisites
+
+- Node.js 22+
+- Docker (for local Postgres + Redis)
+- python3 (used by seed script to parse JSON)
+- npm
 
 ## Architecture
 
@@ -18,6 +25,7 @@ AI-powered portfolio assistant built as a NestJS module inside the Ghostfolio fo
 
 | Tool                    | Description                                                                                                                                               |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `symbol_search`         | Disambiguate crypto vs stock symbols, find correct CoinGecko slugs or Yahoo tickers. Use before `market_data` for any non-obvious crypto.                |
 | `portfolio_analysis`    | Holdings, allocations, total value, account breakdown                                                                                                     |
 | `portfolio_performance` | Returns, net performance, chart data over a date range                                                                                                    |
 | `holdings_lookup`       | Deep dive on a single position (dividends, fees, sectors, countries)                                                                                      |
@@ -48,7 +56,7 @@ All tools wrapped in try/catch -- errors returned to LLM as `{ error: ... }` so 
 **Scenarios breakdown**: single-tool (10), multi-tool (8), ambiguous (6), edge (6).
 
 ```bash
-# Run golden set
+# Run golden set (requires ANTHROPIC_API_KEY + TEST_USER_ACCESS_TOKEN in env)
 COLUMNS=200 npx evalite run evals/golden/agent-golden.eval.ts
 
 # Run scenarios
@@ -59,7 +67,7 @@ COLUMNS=200 npx evalite run evals/scenarios/agent-scenarios.eval.ts
 
 `.github/workflows/golden-evals.yml` -- triggers on push to `main` (agent/eval file changes) or manual dispatch. Hits the deployed Render instance, fails if golden set drops below 100%.
 
-**Required secrets**: `RENDER_URL`, `TEST_USER_ACCESS_TOKEN`
+**Required GitHub secrets**: `RENDER_URL`, `TEST_USER_ACCESS_TOKEN`, `ANTHROPIC_API_KEY`
 
 ## Deployment
 
@@ -73,7 +81,17 @@ COLUMNS=200 npx evalite run evals/scenarios/agent-scenarios.eval.ts
 | Data provider | FMP (paid tier, `batch-quote-short` endpoint)              |
 | Entrypoint    | `prisma migrate deploy` -> `prisma db seed` -> `node main` |
 
-**Env vars**: `ANTHROPIC_API_KEY`, `API_KEY_FINANCIAL_MODELING_PREP`, `DATA_SOURCES`, `DATA_SOURCE_EXCHANGE_RATES`, `DATA_SOURCE_IMPORT`, `NODE_ENV`
+**Render env vars**:
+
+| Var                              | Required | Notes                                                                                        |
+| -------------------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`              | Yes      | Powers the agent LLM                                                                         |
+| `API_KEY_FINANCIAL_MODELING_PREP`| Yes      | Primary data provider for stocks/ETFs                                                        |
+| `API_KEY_COINGECKO_DEMO`        | Yes      | Free demo key from [CoinGecko](https://www.coingecko.com/en/api/pricing) -- 30 calls/min     |
+| `DATA_SOURCES`                   | Yes      | `["FINANCIAL_MODELING_PREP","COINGECKO","MANUAL"]`                                           |
+| `DATA_SOURCE_EXCHANGE_RATES`     | Yes      | `FINANCIAL_MODELING_PREP`                                                                    |
+| `DATA_SOURCE_IMPORT`             | Yes      | `FINANCIAL_MODELING_PREP`                                                                    |
+| `NODE_ENV`                       | Yes      | `production`                                                                                 |
 
 **Endpoints**:
 
@@ -82,27 +100,53 @@ COLUMNS=200 npx evalite run evals/scenarios/agent-scenarios.eval.ts
 
 ## Test User
 
-Seed script: `scripts/seed-test-portfolio.sh`
+The test user is required for evals and manual testing. The seed script creates an anonymous user, imports a portfolio, and outputs an access token.
 
-Creates an anonymous user, imports 6 stocks via FMP + 1 ETF (VOO) via MANUAL, then triggers data gathering.
+### Creating the test user
 
-| Symbol | Shares |
-| ------ | ------ |
-| AAPL   | 10     |
-| MSFT   | 5      |
-| GOOGL  | 8      |
-| VOO    | 15     |
-| NVDA   | 3      |
-| AMZN   | 7      |
-| TSLA   | 4      |
+```bash
+# 1. Make sure the server is running (local or Render)
+
+# 2. Run the seed script
+./scripts/seed-test-portfolio.sh
+# For Render:
+API_BASE=https://ghostfolio-4eid.onrender.com ./scripts/seed-test-portfolio.sh
+
+# 3. The script outputs:
+#    TEST_USER_ACCESS_TOKEN=<some-uuid>
+#    Save this value — you need it for auth and evals.
+```
+
+### Access token vs auth token
+
+- **Access token** (`TEST_USER_ACCESS_TOKEN`): permanent UUID identifying the user. Stored in env / GitHub secrets. Used to obtain short-lived JWTs.
+- **Auth token** (JWT): short-lived bearer token for API calls. Obtained by exchanging the access token:
+
+```bash
+curl http://localhost:3333/api/v1/auth/anonymous/$TEST_USER_ACCESS_TOKEN
+# -> { "authToken": "eyJ..." }
+```
+
+### Seeded portfolio
+
+| Symbol | Shares | Data Source |
+| ------ | ------ | ----------- |
+| AAPL   | 10     | FMP         |
+| MSFT   | 5      | FMP         |
+| GOOGL  | 8      | FMP         |
+| VOO    | 15     | MANUAL      |
+| NVDA   | 3      | FMP         |
+| AMZN   | 7      | FMP         |
+| TSLA   | 4      | FMP         |
 
 ## Key Files
 
 | Path                                                        | Purpose                                     |
 | ----------------------------------------------------------- | ------------------------------------------- |
 | `apps/api/src/app/endpoints/agent/`                         | Agent module (controller, service, metrics) |
-| `apps/api/src/app/endpoints/agent/tools/`                   | Tool definitions                            |
+| `apps/api/src/app/endpoints/agent/tools/`                   | Tool definitions (6 tools)                  |
 | `apps/api/src/app/endpoints/agent/agent-metrics.service.ts` | In-memory metrics + Postgres logging        |
+| `apps/api/src/services/data-provider/coingecko/`            | CoinGecko API client                        |
 | `apps/api/src/assets/chat.html`                             | Chat UI                                     |
 | `evals/golden/`                                             | Golden eval set (18 cases)                  |
 | `evals/scenarios/`                                          | Scenario eval set (30 cases)                |
@@ -119,40 +163,55 @@ Creates an anonymous user, imports 6 stocks via FMP + 1 ETF (VOO) via MANUAL, th
 ### Local Dev
 
 ```bash
-# 1. Start infra
+# 1. Copy env and fill in values
+cp .env.example .env
+
+# 2. Start infra
 docker compose -f docker/docker-compose.dev.yml up -d
 
-# 2. Start server
+# 3. Install deps + run migrations
+npm install
+npx prisma migrate deploy
+npx prisma db seed
+
+# 4. Start server
 npx nx serve api
 
-# 3. Get JWT
+# 5. Seed test user (server must be running)
+./scripts/seed-test-portfolio.sh
+# Save the TEST_USER_ACCESS_TOKEN from the output
+
+# 6. Get JWT (for manual API calls)
 curl http://localhost:3333/api/v1/auth/anonymous/$TEST_USER_ACCESS_TOKEN
 # -> { "authToken": "eyJ..." }
 
-# 4. Chat UI
+# 7. Chat UI
 open http://localhost:3333/api/v1/agent/ui
 
-# 5. Run golden evals (CLI) — requires local server running
-COLUMNS=200 TEST_USER_ACCESS_TOKEN=$TEST_USER_ACCESS_TOKEN \
+# 8. Run golden evals (requires ANTHROPIC_API_KEY + TEST_USER_ACCESS_TOKEN in env)
+COLUMNS=200 TEST_USER_ACCESS_TOKEN=<token> \
   npx evalite run evals/golden/agent-golden.eval.ts
 
-# 6. Eval dashboard (http://localhost:3006)
-TEST_USER_ACCESS_TOKEN=$TEST_USER_ACCESS_TOKEN \
+# 9. Eval dashboard (http://localhost:3006)
+TEST_USER_ACCESS_TOKEN=<token> \
   npx evalite serve evals/golden/agent-golden.eval.ts
 
-# 7. Check metrics
+# 10. Check metrics
 curl -H "Authorization: Bearer <jwt>" http://localhost:3333/api/v1/agent/metrics?since=1h
 ```
 
 ### Against Render
 
 ```bash
-# CLI only
+# Seed test user on Render (only needed once)
+API_BASE=https://ghostfolio-4eid.onrender.com ./scripts/seed-test-portfolio.sh
+
+# Run golden evals
 API_BASE=https://ghostfolio-4eid.onrender.com \
   TEST_USER_ACCESS_TOKEN=<token> \
   npx evalite run evals/golden/agent-golden.eval.ts
 
-# Dashboard (http://localhost:3006)
+# Eval dashboard (http://localhost:3006)
 API_BASE=https://ghostfolio-4eid.onrender.com \
   TEST_USER_ACCESS_TOKEN=<token> \
   npx evalite serve evals/golden/agent-golden.eval.ts
@@ -175,8 +234,8 @@ Metrics snapshot (production, 1h window):
 
 | #   | Requirement                             | Status | Evidence                                                                                              |
 | --- | --------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------- |
-| 1   | Agent responds to natural language      | PASS   | All 5 tools return coherent natural language responses                                                |
-| 2   | 3+ functional tools                     | PASS   | 5 tools: portfolio_analysis, portfolio_performance, holdings_lookup, market_data, transaction_history |
+| 1   | Agent responds to natural language      | PASS   | All 6 tools return coherent natural language responses                                                |
+| 2   | 3+ functional tools                     | PASS   | 6 tools: symbol_search, portfolio_analysis, portfolio_performance, holdings_lookup, market_data, transaction_history |
 | 3   | Tool calls execute + structured results | PASS   | Tools return tables, dollar amounts, percentages                                                      |
 | 4   | Agent synthesizes tool results          | PASS   | Combines tool data into markdown tables, summaries, key takeaways                                     |
 | 5   | Conversation history across turns       | PASS   | "What is its current price?" correctly resolved to VOO from prior turn                                |
