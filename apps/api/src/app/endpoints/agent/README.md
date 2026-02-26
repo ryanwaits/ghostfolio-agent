@@ -38,7 +38,7 @@ The demo portfolio has AAPL (20 shares), MSFT (10), VOO (20), GOOGL (8), and 0.5
 
 - **Model**: Sonnet 4.6 via Vercel AI SDK v6 (`ai@6.0.97`, `@ai-sdk/anthropic@3.0.46`)
 - **Schemas**: Zod v4 (`zod@4.3.6`) -- required by AI SDK v6 `inputSchema`
-- **Max steps**: 5 per chat (multi-tool chaining via `stopWhen: stepCountIs(5)`)
+- **Max steps**: 6 per chat (multi-tool chaining via `stopWhen: stepCountIs(6)`)
 - **Auth**: Ghostfolio JWT + `readAiPrompt` permission guard
 - **Stream**: SSE UI message stream (`text-delta`, `tool-input-start` events)
 
@@ -194,7 +194,9 @@ Import via Ghostfolio UI: Portfolio → Activities → Import (upload icon).
 | `apps/api/src/app/endpoints/agent/verification/`            | Output validation, hallucination check, confidence |
 | `apps/api/src/app/endpoints/agent/agent-feedback.service.ts`| Feedback collection + summary                     |
 | `apps/api/src/app/endpoints/agent/agent-metrics.service.ts` | In-memory metrics + Postgres logging              |
+| `apps/api/src/app/endpoints/agent/submit-feedback.dto.ts`   | Feedback DTO with class-validator decorators       |
 | `apps/client/src/app/pages/agent/`                          | Angular chat UI with rich rendering               |
+| `apps/client/src/app/pages/agent/rendering/`                | Marked extensions (allocation, chart, sparkline, metrics, pills) |
 | `evals/golden/`                                             | Golden eval set (19 cases)                        |
 | `evals/scenarios/`                                          | Scenario eval set (33 cases)                      |
 | `evals/scorers/`                                            | Scorers (GoldenCheck, ResponseQuality, Verification) |
