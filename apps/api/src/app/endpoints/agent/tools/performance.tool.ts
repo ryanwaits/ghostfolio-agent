@@ -29,17 +29,33 @@ export function createPortfolioPerformanceTool({
           userId
         });
 
+        // Downsample chart to ~20 points for LLM context efficiency
+        const chart = result.chart ?? [];
+        let sampled: { date: string; netWorth: number }[] = [];
+
+        if (chart.length > 0) {
+          const step = Math.max(1, Math.floor(chart.length / 20));
+
+          for (let i = 0; i < chart.length; i += step) {
+            sampled.push({
+              date: chart[i].date,
+              netWorth: chart[i].netWorth ?? 0
+            });
+          }
+
+          // Always include the last point
+          const last = chart[chart.length - 1];
+
+          if (sampled[sampled.length - 1]?.date !== last.date) {
+            sampled.push({ date: last.date, netWorth: last.netWorth ?? 0 });
+          }
+        }
+
         return {
           firstOrderDate: result.firstOrderDate,
           hasErrors: result.hasErrors,
           performance: result.performance,
-          chartSummary: result.chart?.length
-            ? {
-                points: result.chart.length,
-                first: result.chart[0],
-                last: result.chart[result.chart.length - 1]
-              }
-            : null
+          chart: sampled.length ? sampled : null
         };
       } catch (error) {
         return { error: `Failed to fetch performance: ${error instanceof Error ? error.message : 'unknown error'}` };
