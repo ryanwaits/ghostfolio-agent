@@ -15,6 +15,11 @@ import { createPortfolioPerformanceTool } from './tools/performance.tool';
 import { createPortfolioAnalysisTool } from './tools/portfolio.tool';
 import { createSymbolSearchTool } from './tools/symbol-search.tool';
 import { createTransactionHistoryTool } from './tools/transactions.tool';
+import {
+  checkHallucination,
+  computeConfidence,
+  validateOutput
+} from './verification';
 
 const SYSTEM_PROMPT = `You are a financial analysis assistant powered by Ghostfolio. You help users understand their investment portfolio through data-driven insights.
 
@@ -66,7 +71,7 @@ export class AgentService {
       })
     );
 
-    return streamText({
+    const result = streamText({
       model: createAnthropic()('claude-sonnet-4-6'),
       system: SYSTEM_PROMPT,
       messages: messages as ModelMessage[],
@@ -140,12 +145,54 @@ export class AgentService {
           timestamp: Date.now()
         });
       },
-      onFinish: ({ steps, usage }) => {
+      onFinish: ({ steps, usage, text }) => {
         const latencyMs = Date.now() - startTime;
         const allTools = steps.flatMap((s) =>
           s.toolCalls.map((tc) => tc.toolName)
         );
         const uniqueTools = [...new Set(allTools)];
+
+        // Run verification
+        const toolResults = steps.flatMap((s) =>
+          s.toolResults.map((tr: any) => ({
+            toolName: tr.toolName as string,
+            result: tr.output
+          }))
+        );
+        const toolErrors = steps.flatMap((s) =>
+          s.toolResults.filter((tr: any) => {
+            const out = tr.output;
+            return out && typeof out === 'object' && 'error' in out;
+          })
+        );
+
+        const validation = validateOutput({
+          text,
+          toolCalls: allTools
+        });
+        const hallucination = checkHallucination({
+          text,
+          toolResults
+        });
+        const confidence = computeConfidence({
+          toolCallCount: allTools.length,
+          toolErrorCount: toolErrors.length,
+          stepCount: steps.length,
+          maxSteps: 6,
+          validation,
+          hallucination
+        });
+
+        this.logger.log(
+          JSON.stringify({
+            event: 'verification',
+            requestId,
+            userId,
+            confidence: confidence.score,
+            validationIssues: validation.issues,
+            hallucinationIssues: hallucination.issues
+          })
+        );
 
         this.logger.log(
           JSON.stringify({
@@ -170,9 +217,25 @@ export class AgentService {
           completionTokens:
             (usage as any).completionTokens ?? (usage as any).outputTokens ?? 0,
           totalTokens: usage.totalTokens ?? 0,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          verificationScore: confidence.score,
+          verificationResult: {
+            confidence: confidence.breakdown,
+            validation: {
+              valid: validation.valid,
+              score: validation.score,
+              issues: validation.issues
+            },
+            hallucination: {
+              clean: hallucination.clean,
+              score: hallucination.score,
+              issues: hallucination.issues
+            }
+          }
         });
       }
     });
+
+    return { result, requestId };
   }
 }

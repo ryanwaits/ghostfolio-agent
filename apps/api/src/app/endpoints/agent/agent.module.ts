@@ -24,6 +24,7 @@ import { SymbolProfileModule } from '@ghostfolio/api/services/symbol-profile/sym
 import { Module } from '@nestjs/common';
 
 import { AgentController } from './agent.controller';
+import { AgentFeedbackService } from './agent-feedback.service';
 import { AgentMetricsService } from './agent-metrics.service';
 import { AgentService } from './agent.service';
 
@@ -49,6 +50,7 @@ import { AgentService } from './agent.service';
   providers: [
     AccountBalanceService,
     AccountService,
+    AgentFeedbackService,
     AgentMetricsService,
     AgentService,
     CurrentRateService,

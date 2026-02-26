@@ -5,9 +5,15 @@
 
 const API_BASE = process.env.API_BASE || 'http://localhost:3333';
 
-interface AgentResponse {
+export interface ToolResultEntry {
+  toolName: string;
+  result: unknown;
+}
+
+export interface AgentResponse {
   text: string;
   toolCalls: string[];
+  toolResults: ToolResultEntry[];
 }
 
 export async function getAuthToken(): Promise<string> {
@@ -55,6 +61,7 @@ function parseUIMessageStream(raw: string): AgentResponse {
   const lines = raw.split('\n');
   let text = '';
   const toolCalls: string[] = [];
+  const toolResults: ToolResultEntry[] = [];
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -72,11 +79,16 @@ function parseUIMessageStream(raw: string): AgentResponse {
         text += evt.delta;
       } else if (evt.type === 'tool-input-start') {
         toolCalls.push(evt.toolName);
+      } else if (evt.type === 'tool-result') {
+        toolResults.push({
+          toolName: evt.toolName,
+          result: evt.result
+        });
       }
     } catch {
       // skip unparseable lines
     }
   }
 
-  return { text, toolCalls };
+  return { text, toolCalls, toolResults };
 }

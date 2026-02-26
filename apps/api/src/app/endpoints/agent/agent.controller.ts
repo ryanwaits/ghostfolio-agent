@@ -1,5 +1,6 @@
 import { HasPermission } from '@ghostfolio/api/decorators/has-permission.decorator';
 import { HasPermissionGuard } from '@ghostfolio/api/guards/has-permission.guard';
+import { PrismaService } from '@ghostfolio/api/services/prisma/prisma.service';
 import { permissions } from '@ghostfolio/common/permissions';
 import type { RequestWithUser } from '@ghostfolio/common/types';
 
@@ -11,6 +12,8 @@ import {
   HttpStatus,
   Inject,
   Logger,
+  NotFoundException,
+  Param,
   Post,
   Query,
   Res,
@@ -23,6 +26,7 @@ import type { Response } from 'express';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { AgentFeedbackService } from './agent-feedback.service';
 import { AgentMetricsService } from './agent-metrics.service';
 import { AgentService } from './agent.service';
 
@@ -33,8 +37,10 @@ export class AgentController {
   private readonly logger = new Logger(AgentController.name);
 
   public constructor(
+    private readonly agentFeedbackService: AgentFeedbackService,
     private readonly agentMetricsService: AgentMetricsService,
     private readonly agentService: AgentService,
+    private readonly prismaService: PrismaService,
     @Inject(REQUEST) private readonly request: RequestWithUser
   ) {}
 
@@ -52,12 +58,19 @@ export class AgentController {
     @Res() res: Response
   ) {
     try {
-      const result = this.agentService.chat({
+      const { result, requestId } = this.agentService.chat({
         messages: body.messages,
         userId: this.request.user.id
       });
 
-      result.pipeUIMessageStreamToResponse(res);
+      result.pipeUIMessageStreamToResponse(res, {
+        messageMetadata: ({ part }) => {
+          if (part.type === 'finish') {
+            return { requestId };
+          }
+          return undefined;
+        }
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
 
@@ -88,14 +101,55 @@ export class AgentController {
     }
   }
 
+  @Post('feedback')
+  @HasPermission(permissions.readAiPrompt)
+  @UseGuards(AuthGuard('jwt'), HasPermissionGuard)
+  public async submitFeedback(
+    @Body() body: { requestId: string; rating: number; comment?: string }
+  ) {
+    return this.agentFeedbackService.submit({
+      requestId: body.requestId,
+      userId: this.request.user.id,
+      rating: body.rating,
+      comment: body.comment
+    });
+  }
+
+  @Get('verification/:requestId')
+  @HasPermission(permissions.readAiPrompt)
+  @UseGuards(AuthGuard('jwt'), HasPermissionGuard)
+  public async getVerification(@Param('requestId') requestId: string) {
+    const log = await this.prismaService.agentChatLog.findUnique({
+      where: { requestId },
+      select: {
+        requestId: true,
+        verificationScore: true,
+        verificationResult: true,
+        createdAt: true
+      }
+    });
+
+    if (!log) {
+      throw new NotFoundException(`No chat log found for ${requestId}`);
+    }
+
+    return log;
+  }
+
   @Get('metrics')
   @HasPermission(permissions.readAiPrompt)
   @UseGuards(AuthGuard('jwt'), HasPermissionGuard)
-  public getMetrics(@Query('since') since?: string) {
+  public async getMetrics(@Query('since') since?: string) {
     const sinceMs = since ? parseDuration(since) : undefined;
 
+    const [summary, feedback] = await Promise.all([
+      this.agentMetricsService.getSummary(sinceMs),
+      this.agentFeedbackService.getSummary(sinceMs)
+    ]);
+
     return {
-      summary: this.agentMetricsService.getSummary(sinceMs),
+      summary,
+      feedback,
       recent: this.agentMetricsService.getRecent(10)
     };
   }

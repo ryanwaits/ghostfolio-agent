@@ -1,5 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@ghostfolio/api/services/prisma/prisma.service';
+
+import { Injectable, Logger } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 
 export interface ChatMetric {
   requestId: string;
@@ -12,6 +14,8 @@ export interface ChatMetric {
   totalTokens: number;
   errorOccurred?: boolean;
   errorMessage?: string;
+  verificationScore?: number;
+  verificationResult?: Record<string, unknown>;
   timestamp: number;
 }
 
@@ -64,7 +68,10 @@ export class AgentMetricsService {
         completionTokens: metric.completionTokens,
         totalTokens: metric.totalTokens,
         errorOccurred: metric.errorOccurred ?? false,
-        errorMessage: metric.errorMessage ?? null
+        errorMessage: metric.errorMessage ?? null,
+        verificationScore: metric.verificationScore ?? null,
+        verificationResult:
+          (metric.verificationResult as Prisma.InputJsonValue) ?? undefined
       }
     });
   }

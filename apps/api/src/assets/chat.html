@@ -62,6 +62,35 @@
       padding: 4px 0;
       font-style: italic;
     }
+    .feedback-bar {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+      align-items: center;
+    }
+    .feedback-bar button {
+      background: none;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #a3a3a3;
+      transition: all 0.15s;
+    }
+    .feedback-bar button:hover { border-color: #555; color: #e5e5e5; }
+    .feedback-bar button.active-up { border-color: #22c55e; color: #22c55e; }
+    .feedback-bar button.active-down { border-color: #ef4444; color: #ef4444; }
+    .feedback-bar button:disabled { opacity: 0.5; cursor: default; }
+    .confidence-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-left: 6px;
+    }
+    .confidence-dot.green { background: #22c55e; }
+    .confidence-dot.yellow { background: #eab308; }
+    .confidence-dot.red { background: #ef4444; }
 
     /* Markdown styles for assistant messages */
     .msg.assistant p { margin: 0 0 12px 0; }
@@ -213,13 +242,32 @@
       sendMessage();
     });
 
-    (function init() {
-      authToken = localStorage.getItem("agentforge_token");
-      if (!authToken) {
-        authToken = prompt("Enter your Ghostfolio JWT token:");
-        if (authToken) localStorage.setItem("agentforge_token", authToken);
+    async function authenticate() {
+      // 1. Try Ghostfolio's session (works when accessed via Angular client proxy)
+      authToken = sessionStorage.getItem("auth-token") || localStorage.getItem("auth-token");
+      if (authToken) return;
+
+      // 2. Prompt for security token and authenticate via Ghostfolio's anonymous auth
+      var securityToken = prompt("Enter your Ghostfolio Security Token:");
+      if (!securityToken) {
+        addMsg("error", "Authentication required to use the agent.");
+        sendBtn.disabled = true;
+        return;
       }
-    })();
+
+      try {
+        var res = await fetch(API_BASE + "/api/v1/auth/anonymous/" + encodeURIComponent(securityToken));
+        if (!res.ok) throw new Error("Invalid token");
+        var data = await res.json();
+        authToken = data.authToken;
+        sessionStorage.setItem("auth-token", authToken);
+      } catch (e) {
+        addMsg("error", "Authentication failed. Check your security token and try refreshing.");
+        sendBtn.disabled = true;
+      }
+    }
+
+    authenticate();
 
     function addMsg(role, html) {
       var d = document.createElement("div");
@@ -236,6 +284,40 @@
       return d.innerHTML;
     }
 
+    function addFeedbackBar(parentEl, requestId) {
+      if (!requestId) return;
+      var bar = document.createElement("div");
+      bar.className = "feedback-bar";
+      var upBtn = document.createElement("button");
+      upBtn.textContent = "\u{1F44D}";
+      upBtn.title = "Helpful";
+      var downBtn = document.createElement("button");
+      downBtn.textContent = "\u{1F44E}";
+      downBtn.title = "Not helpful";
+
+      function send(rating) {
+        upBtn.disabled = true;
+        downBtn.disabled = true;
+        if (rating === 1) upBtn.className = "active-up";
+        else downBtn.className = "active-down";
+
+        fetch(API_BASE + "/api/v1/agent/feedback", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + authToken
+          },
+          body: JSON.stringify({ requestId: requestId, rating: rating })
+        }).catch(function() {});
+      }
+
+      upBtn.onclick = function() { send(1); };
+      downBtn.onclick = function() { send(-1); };
+      bar.appendChild(upBtn);
+      bar.appendChild(downBtn);
+      parentEl.appendChild(bar);
+    }
+
     async function sendMessage() {
       var text = inputEl.value.trim();
       if (!text) return;
@@ -249,6 +331,7 @@
       var el = addMsg("assistant", "");
       el.classList.add("streaming");
       var full = "";
+      var currentRequestId = null;
 
       try {
         var res = await fetch(API_BASE + "/api/v1/agent/chat", {
@@ -291,6 +374,10 @@
                 td.className = "tool-call";
                 td.textContent = "Calling " + evt.toolName + "...";
                 el.parentNode.insertBefore(td, el);
+              } else if (evt.type === "finish" && evt.messageMetadata) {
+                currentRequestId = evt.messageMetadata.requestId || null;
+              } else if (evt.type === "message-metadata" && evt.messageMetadata) {
+                currentRequestId = evt.messageMetadata.requestId || currentRequestId;
               }
             } catch (e) {}
           }
@@ -301,6 +388,7 @@
         if (full) {
           el.classList.remove("streaming");
           el.innerHTML = marked.parse(full);
+          addFeedbackBar(el, currentRequestId);
           messagesEl.scrollTop = messagesEl.scrollHeight;
           conversation.push({ role: "assistant", content: full });
         }
