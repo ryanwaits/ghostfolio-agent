@@ -29,6 +29,7 @@ import { join } from 'node:path';
 import { AgentFeedbackService } from './agent-feedback.service';
 import { AgentMetricsService } from './agent-metrics.service';
 import { AgentService } from './agent.service';
+import { SubmitFeedbackDto } from './submit-feedback.dto';
 
 const chatHtml = readFileSync(join(__dirname, 'assets', 'chat.html'), 'utf-8');
 
@@ -104,9 +105,7 @@ export class AgentController {
   @Post('feedback')
   @HasPermission(permissions.readAiPrompt)
   @UseGuards(AuthGuard('jwt'), HasPermissionGuard)
-  public async submitFeedback(
-    @Body() body: { requestId: string; rating: number; comment?: string }
-  ) {
+  public async submitFeedback(@Body() body: SubmitFeedbackDto) {
     return this.agentFeedbackService.submit({
       requestId: body.requestId,
       userId: this.request.user.id,
@@ -119,12 +118,18 @@ export class AgentController {
   @HasPermission(permissions.readAiPrompt)
   @UseGuards(AuthGuard('jwt'), HasPermissionGuard)
   public async getVerification(@Param('requestId') requestId: string) {
-    const log = await this.prismaService.agentChatLog.findUnique({
-      where: { requestId },
+    const log = await this.prismaService.agentChatLog.findFirst({
+      where: { requestId, userId: this.request.user.id },
       select: {
         requestId: true,
         verificationScore: true,
         verificationResult: true,
+        latencyMs: true,
+        totalSteps: true,
+        toolsUsed: true,
+        promptTokens: true,
+        completionTokens: true,
+        totalTokens: true,
         createdAt: true
       }
     });
