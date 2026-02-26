@@ -2,7 +2,7 @@
 
 AI-powered portfolio assistant built as a NestJS module inside the Ghostfolio fork. Sonnet 4.6 with 6 tools, SSE streaming, structured observability, 2-tier eval suite, and CI-gated golden tests.
 
-**Live**: https://ghostfolio-4eid.onrender.com/api/v1/agent/ui
+**Live**: https://ghostfolio-4eid.onrender.com/agent
 
 ---
 
@@ -10,9 +10,8 @@ AI-powered portfolio assistant built as a NestJS module inside the Ghostfolio fo
 
 A demo user with a seeded portfolio is auto-created on every deploy.
 
-1. Go to https://ghostfolio-4eid.onrender.com/api/v1/agent/ui
-2. Enter security token: `demo-token-2026`
-3. Ask "What do I own?"
+1. Go to https://ghostfolio-4eid.onrender.com/agent
+2. Ask "What do I own?"
 
 The demo portfolio has AAPL (20 shares), MSFT (10), VOO (20), GOOGL (8), and 0.5 BTC with buys, sells, and dividends spanning Jan 2024 – Jan 2025.
 
@@ -25,7 +24,7 @@ The demo portfolio has AAPL (20 shares), MSFT (10), VOO (20), GOOGL (8), and 0.5
    - `stocks-portfolio.csv` -- US equities (VOO, AAPL, MSFT, GOOGL, AMZN, NVDA, META)
    - `crypto-portfolio.csv` -- crypto (BTC, ETH, SOL, LINK, UNI)
    - `hybrid-portfolio.csv` -- mixed stocks + crypto
-5. Go to `/api/v1/agent/ui`, enter your Security Token, and chat
+5. Go to `/agent` and chat
 
 ---
 
@@ -138,7 +137,7 @@ npx evalite run evals/scenarios/agent-scenarios.eval.ts
 
 **Endpoints**:
 
-- Chat UI: `/api/v1/agent/ui`
+- Chat UI: `/agent` (Angular page)
 - Chat API: `POST /api/v1/agent/chat`
 - Feedback: `POST /api/v1/agent/feedback`
 - Verification: `GET /api/v1/agent/verification/:requestId`
@@ -195,7 +194,7 @@ Import via Ghostfolio UI: Portfolio → Activities → Import (upload icon).
 | `apps/api/src/app/endpoints/agent/verification/`            | Output validation, hallucination check, confidence |
 | `apps/api/src/app/endpoints/agent/agent-feedback.service.ts`| Feedback collection + summary                     |
 | `apps/api/src/app/endpoints/agent/agent-metrics.service.ts` | In-memory metrics + Postgres logging              |
-| `apps/api/src/assets/chat.html`                             | Chat UI with feedback buttons                     |
+| `apps/client/src/app/pages/agent/`                          | Angular chat UI with rich rendering               |
 | `evals/golden/`                                             | Golden eval set (19 cases)                        |
 | `evals/scenarios/`                                          | Scenario eval set (33 cases)                      |
 | `evals/scorers/`                                            | Scorers (GoldenCheck, ResponseQuality, Verification) |
@@ -224,8 +223,8 @@ npx prisma db seed
 # 4. Start server
 npx nx serve api
 
-# 5. Chat UI (enter demo-token-2026 when prompted)
-open http://localhost:3333/api/v1/agent/ui
+# 5. Chat UI (sign in first, then navigate to Agent)
+open http://localhost:4200/agent
 
 # 6. Check metrics
 curl http://localhost:3333/api/v1/auth/anonymous/demo-token-2026

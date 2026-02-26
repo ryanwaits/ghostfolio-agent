@@ -8,7 +8,6 @@ import {
   Body,
   Controller,
   Get,
-  Header,
   HttpStatus,
   Inject,
   Logger,
@@ -23,15 +22,10 @@ import { REQUEST } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import type { UIMessage } from 'ai';
 import type { Response } from 'express';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { AgentFeedbackService } from './agent-feedback.service';
 import { AgentMetricsService } from './agent-metrics.service';
 import { AgentService } from './agent.service';
 import { SubmitFeedbackDto } from './submit-feedback.dto';
-
-const chatHtml = readFileSync(join(__dirname, 'assets', 'chat.html'), 'utf-8');
 
 @Controller('agent')
 export class AgentController {
@@ -44,12 +38,6 @@ export class AgentController {
     private readonly prismaService: PrismaService,
     @Inject(REQUEST) private readonly request: RequestWithUser
   ) {}
-
-  @Get('ui')
-  @Header('Content-Type', 'text/html')
-  public getUi() {
-    return chatHtml;
-  }
 
   @Post('chat')
   @HasPermission(permissions.readAiPrompt)

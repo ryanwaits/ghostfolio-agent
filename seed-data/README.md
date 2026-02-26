@@ -6,7 +6,7 @@ Sample CSV files for quickly loading portfolio data into Ghostfolio. Use these f
 
 1. **Create an account** — Click "Get Started" on the Ghostfolio homepage. Save your Security Token.
 2. **Import a portfolio** — Go to Portfolio → Activities → Import (upload icon), select one of these CSVs.
-3. **Use the agent** — Navigate to `/api/v1/agent/ui`, enter your Security Token, and start chatting.
+3. **Use the agent** — Navigate to `/agent` and start chatting.
 
 ## Portfolios
 
