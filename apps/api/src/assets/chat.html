@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.4/purify.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -343,7 +344,7 @@
           body: JSON.stringify({ messages: conversation })
         });
 
-        if (!res.ok) throw new Error(res.status + ": " + (await res.text()));
+        if (!res.ok) throw new Error("Request failed with status " + res.status);
 
         var reader = res.body.getReader();
         var decoder = new TextDecoder();
@@ -384,10 +385,30 @@
           messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
+        // Flush remaining buffer
+        if (buffer.trim()) {
+          var line = buffer.trim();
+          if (line.startsWith("data: ")) {
+            var data = line.slice(6);
+            if (data !== "[DONE]") {
+              try {
+                var evt = JSON.parse(data);
+                if (evt.type === "text-delta") {
+                  full += evt.delta;
+                } else if (evt.type === "finish" && evt.messageMetadata) {
+                  currentRequestId = evt.messageMetadata.requestId || null;
+                } else if (evt.type === "message-metadata" && evt.messageMetadata) {
+                  currentRequestId = evt.messageMetadata.requestId || currentRequestId;
+                }
+              } catch (e) {}
+            }
+          }
+        }
+
         // Render final markdown
         if (full) {
           el.classList.remove("streaming");
-          el.innerHTML = marked.parse(full);
+          el.innerHTML = DOMPurify.sanitize(marked.parse(full));
           addFeedbackBar(el, currentRequestId);
           messagesEl.scrollTop = messagesEl.scrollHeight;
           conversation.push({ role: "assistant", content: full });
