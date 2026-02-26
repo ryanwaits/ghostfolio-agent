@@ -1,0 +1,17 @@
+Date,Symbol,Currency,Price,Quantity,Type,Fee,Note
+2024-01-15,VOO,USD,437.50,25,buy,0,S&P 500 core position
+2024-01-15,AAPL,USD,185.25,20,buy,0,
+2024-02-10,MSFT,USD,405.00,12,buy,0,
+2024-03-05,GOOGL,USD,138.75,30,buy,0,
+2024-04-01,AMZN,USD,180.50,15,buy,0,
+2024-05-20,NVDA,USD,925.00,5,buy,0,AI exposure
+2024-06-15,VOO,USD,495.00,10,buy,0,DCA into index
+2024-07-10,AAPL,USD,228.50,10,buy,0,Added on dip
+2024-09-01,MSFT,USD,415.30,5,buy,0,
+2024-09-20,VOO,USD,0.78,35,dividend,0,Q3 distribution
+2024-10-15,NVDA,USD,138.00,3,buy,0,Post-split add
+2024-11-05,AAPL,USD,0.25,30,dividend,0,Q4 dividend
+2024-12-20,VOO,USD,0.82,35,dividend,0,Q4 distribution
+2025-01-10,GOOGL,USD,195.40,5,sell,0,Trimmed position
+2025-01-15,META,USD,612.00,8,buy,0,New position
+2025-02-01,AAPL,USD,235.00,5,sell,0,Rebalance

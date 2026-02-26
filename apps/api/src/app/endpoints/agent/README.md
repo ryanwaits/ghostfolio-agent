@@ -6,11 +6,33 @@ AI-powered portfolio assistant built as a NestJS module inside the Ghostfolio fo
 
 ---
 
+## Try It Now (30 seconds)
+
+A demo user with a seeded portfolio is auto-created on every deploy.
+
+1. Go to https://ghostfolio-4eid.onrender.com/api/v1/agent/ui
+2. Enter security token: `demo-token-2026`
+3. Ask "What do I own?"
+
+The demo portfolio has AAPL (20 shares), MSFT (10), VOO (20), GOOGL (8), and 0.5 BTC with buys, sells, and dividends spanning Jan 2024 – Jan 2025.
+
+### New User Flow (bring your own data)
+
+1. Go to https://ghostfolio-4eid.onrender.com and click **Get Started**
+2. Save the Security Token shown -- this is your only login credential
+3. Navigate to **Portfolio → Activities → Import** (upload icon)
+4. Upload one of the sample CSVs from `seed-data/`:
+   - `stocks-portfolio.csv` -- US equities (VOO, AAPL, MSFT, GOOGL, AMZN, NVDA, META)
+   - `crypto-portfolio.csv` -- crypto (BTC, ETH, SOL, LINK, UNI)
+   - `hybrid-portfolio.csv` -- mixed stocks + crypto
+5. Go to `/api/v1/agent/ui`, enter your Security Token, and chat
+
+---
+
 ## Prerequisites
 
 - Node.js 22+
 - Docker (for local Postgres + Redis)
-- python3 (used by seed script to parse JSON)
 - npm
 
 ## Architecture
@@ -38,22 +60,43 @@ All tools wrapped in try/catch -- errors returned to LLM as `{ error: ... }` so 
 
 | Layer                | Detail                                                                                                            |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Structured logs      | `chat_start`, `step_finish`, `chat_complete`, `chat_error` -- JSON with requestId, userId, latency, tools, tokens |
+| Structured logs      | `chat_start`, `step_finish`, `verification`, `chat_complete`, `chat_error` -- JSON with requestId, userId, etc.   |
 | In-memory metrics    | Ring buffer (last 1000 chats) via `AgentMetricsService`, served at `GET /api/v1/agent/metrics?since=1h`           |
-| Postgres persistence | `AgentChatLog` table -- survives deploys, queryable via Prisma                                                    |
+| Postgres persistence | `AgentChatLog` table with `verificationScore` + `verificationResult` -- survives deploys, queryable via Prisma    |
+| Verification         | 3 systems run on every response: output validation, hallucination detection, confidence scoring (0-1 composite)   |
+| Feedback             | `AgentFeedback` table -- thumbs up/down per response, unique per requestId+userId, summary in metrics endpoint    |
 | Error handling       | `onError` callback in `streamText()` records error metrics; controller wrapped in try/catch returns clean 500     |
 | Security             | Error messages sanitized -- DB URLs, Redis URLs, API keys redacted before storage/exposure                        |
 
-## Eval Suite (2-tier)
+## Verification Systems
 
-| Tier       | Cases | Scorers                                                                  | Threshold       | Purpose                            |
-| ---------- | ----- | ------------------------------------------------------------------------ | --------------- | ---------------------------------- |
-| Golden Set | 18    | `GoldenCheck` (deterministic, binary pass/fail, seed-data agnostic)      | 100% required   | CI gate -- runs every push to main |
-| Scenarios  | 30    | `ToolCallAccuracy` + `HasResponse` + `ResponseQuality` (Haiku 4.5 judge) | 80%+ acceptable | Manual regression check            |
+Three deterministic checks run in `onFinish` on every agent response:
 
-**Golden Set breakdown**: tool routing (7), structural output (4), no-tool behavioral (4), guardrails (3).
+| System                 | What it checks                                                                              | Weight |
+| ---------------------- | ------------------------------------------------------------------------------------------- | ------ |
+| Output Validation      | Non-empty, reasonable length, numeric data present when tools called, disclaimer on forecasts | 0.3    |
+| Hallucination Detection | Ticker symbols match tool data, dollar amounts approximately match, no phantom holdings      | 0.3    |
+| Confidence Score       | Composite 0-1 from tool success rate (0.3), step efficiency (0.1), validation + hallucination | --     |
 
-**Scenarios breakdown**: single-tool (10), multi-tool (8), ambiguous (6), edge (6).
+Results are persisted to `AgentChatLog` and queryable via `GET /agent/verification/:requestId`.
+
+## Feedback
+
+Chat UI shows thumbs up/down buttons after each assistant message. Feedback is stored in `AgentFeedback` with a unique constraint per (requestId, userId).
+
+- `POST /agent/feedback` -- submit rating (-1 or 1) + optional comment
+- `GET /agent/metrics` -- includes feedback summary (total, positive, negative, satisfaction rate, recent comments)
+
+## Eval Suite (2-tier, 52 cases)
+
+| Tier       | Cases | Scorers                                                                               | Threshold       | Purpose                            |
+| ---------- | ----- | ------------------------------------------------------------------------------------- | --------------- | ---------------------------------- |
+| Golden Set | 19    | `GoldenCheck` (deterministic, binary pass/fail, seed-data agnostic)                   | 100% required   | CI gate -- runs every push to main |
+| Scenarios  | 33    | `ToolCallAccuracy` + `HasResponse` + `ResponseQuality` + `VerificationCheck`           | 80%+ acceptable | Manual regression check            |
+
+**Golden Set breakdown**: tool routing (7), structural output (4), no-tool behavioral (2), guardrails (6).
+
+**Scenarios breakdown**: single-tool (10), multi-tool (10), ambiguous (6), edge (7).
 
 ```bash
 # Run golden set (requires ANTHROPIC_API_KEY + TEST_USER_ACCESS_TOKEN in env)
@@ -96,67 +139,71 @@ npx evalite run evals/scenarios/agent-scenarios.eval.ts
 **Endpoints**:
 
 - Chat UI: `/api/v1/agent/ui`
-- Metrics: `/api/v1/agent/metrics`
+- Chat API: `POST /api/v1/agent/chat`
+- Feedback: `POST /api/v1/agent/feedback`
+- Verification: `GET /api/v1/agent/verification/:requestId`
+- Metrics: `GET /api/v1/agent/metrics?since=1h` (includes feedback summary)
 
-## Test User
+## Demo User
 
-The test user is required for evals and manual testing. The seed script creates an anonymous user, imports a portfolio, and outputs an access token.
+A demo user is auto-created by `prisma db seed` on every deploy (and locally via `npx prisma db seed`).
 
-### Creating the test user
-
-```bash
-# 1. Make sure the server is running (local or Render)
-
-# 2. Run the seed script
-./scripts/seed-test-portfolio.sh
-# For Render:
-API_BASE=https://ghostfolio-4eid.onrender.com ./scripts/seed-test-portfolio.sh
-
-# 3. The script outputs:
-#    TEST_USER_ACCESS_TOKEN=<some-uuid>
-#    Save this value — you need it for auth and evals.
-```
-
-### Access token vs auth token
-
-- **Access token** (`TEST_USER_ACCESS_TOKEN`): permanent UUID identifying the user. Stored in env / GitHub secrets. Used to obtain short-lived JWTs.
-- **Auth token** (JWT): short-lived bearer token for API calls. Obtained by exchanging the access token:
-
-```bash
-curl http://localhost:3333/api/v1/auth/anonymous/$TEST_USER_ACCESS_TOKEN
-# -> { "authToken": "eyJ..." }
-```
+- **Security token**: `demo-token-2026`
+- **Role**: ADMIN
+- **Account**: "Main Brokerage" (USD, $5,000 balance)
 
 ### Seeded portfolio
 
-| Symbol | Shares | Data Source |
-| ------ | ------ | ----------- |
-| AAPL   | 10     | FMP         |
-| MSFT   | 5      | FMP         |
-| GOOGL  | 8      | FMP         |
-| VOO    | 15     | MANUAL      |
-| NVDA   | 3      | FMP         |
-| AMZN   | 7      | FMP         |
-| TSLA   | 4      | FMP         |
+| Symbol  | Type | Qty   | Data Source |
+| ------- | ---- | ----- | ----------- |
+| AAPL    | BUY  | 20    | YAHOO       |
+| MSFT    | BUY  | 10    | YAHOO       |
+| VOO     | BUY  | 20    | YAHOO       |
+| GOOGL   | BUY  | 8     | YAHOO       |
+| bitcoin | BUY  | 0.5   | COINGECKO   |
+| MSFT    | SELL | 3     | YAHOO       |
+| VOO     | DIV  | --    | YAHOO       |
+
+### Access token vs auth token
+
+- **Security token** (`demo-token-2026`): permanent passphrase identifying the user. Enter in the chat UI or Ghostfolio sign-in dialog.
+- **Auth token** (JWT): short-lived bearer token for API calls. Obtained by exchanging the security token:
+
+```bash
+curl http://localhost:3333/api/v1/auth/anonymous/demo-token-2026
+# -> { "authToken": "eyJ..." }
+```
+
+### Sample CSVs for custom portfolios
+
+Located in `seed-data/` at the repo root:
+
+| File | Focus | Holdings |
+| ---- | ----- | -------- |
+| `stocks-portfolio.csv` | US equities | VOO, AAPL, MSFT, GOOGL, AMZN, NVDA, META |
+| `crypto-portfolio.csv` | Crypto | BTC, ETH, SOL, LINK, UNI |
+| `hybrid-portfolio.csv` | Mixed | Stocks + crypto |
+
+Import via Ghostfolio UI: Portfolio → Activities → Import (upload icon).
 
 ## Key Files
 
-| Path                                                        | Purpose                                     |
-| ----------------------------------------------------------- | ------------------------------------------- |
-| `apps/api/src/app/endpoints/agent/`                         | Agent module (controller, service, metrics) |
-| `apps/api/src/app/endpoints/agent/tools/`                   | Tool definitions (6 tools)                  |
-| `apps/api/src/app/endpoints/agent/agent-metrics.service.ts` | In-memory metrics + Postgres logging        |
-| `apps/api/src/services/data-provider/coingecko/`            | CoinGecko API client                        |
-| `apps/api/src/assets/chat.html`                             | Chat UI                                     |
-| `evals/golden/`                                             | Golden eval set (18 cases)                  |
-| `evals/scenarios/`                                          | Scenario eval set (30 cases)                |
-| `evals/scorers/`                                            | Custom scorers (GoldenCheck, deterministic) |
-| `evals/helpers.ts`                                          | Eval utilities                              |
-| `.github/workflows/golden-evals.yml`                        | CI workflow                                 |
-| `scripts/seed-test-portfolio.sh`                            | Test user + portfolio seed                  |
-| `render.yaml`                                               | Render blueprint                            |
-| `prisma/schema.prisma`                                      | AgentChatLog model                          |
-| `prisma/migrations/20260224210123_added_agent_chat_log/`    | Chat log migration                          |
+| Path                                                        | Purpose                                          |
+| ----------------------------------------------------------- | ------------------------------------------------ |
+| `apps/api/src/app/endpoints/agent/`                         | Agent module (controller, service, metrics)       |
+| `apps/api/src/app/endpoints/agent/tools/`                   | Tool definitions (6 tools)                        |
+| `apps/api/src/app/endpoints/agent/verification/`            | Output validation, hallucination check, confidence |
+| `apps/api/src/app/endpoints/agent/agent-feedback.service.ts`| Feedback collection + summary                     |
+| `apps/api/src/app/endpoints/agent/agent-metrics.service.ts` | In-memory metrics + Postgres logging              |
+| `apps/api/src/assets/chat.html`                             | Chat UI with feedback buttons                     |
+| `evals/golden/`                                             | Golden eval set (19 cases)                        |
+| `evals/scenarios/`                                          | Scenario eval set (33 cases)                      |
+| `evals/scorers/`                                            | Scorers (GoldenCheck, ResponseQuality, Verification) |
+| `evals/helpers.ts`                                          | Eval utilities (SSE parser with tool results)     |
+| `seed-data/`                                                | Sample CSVs for demo portfolios                   |
+| `prisma/seed.mts`                                           | Demo user + portfolio seed                        |
+| `prisma/schema.prisma`                                      | AgentChatLog, AgentFeedback models                |
+| `.github/workflows/golden-evals.yml`                        | CI workflow                                       |
 
 ## Quickstart
 
@@ -169,7 +216,7 @@ cp .env.example .env
 # 2. Start infra
 docker compose -f docker/docker-compose.dev.yml up -d
 
-# 3. Install deps + run migrations
+# 3. Install deps + run migrations + seed demo user
 npm install
 npx prisma migrate deploy
 npx prisma db seed
@@ -177,47 +224,33 @@ npx prisma db seed
 # 4. Start server
 npx nx serve api
 
-# 5. Seed test user (server must be running)
-./scripts/seed-test-portfolio.sh
-# Save the TEST_USER_ACCESS_TOKEN from the output
-
-# 6. Get JWT (for manual API calls)
-curl http://localhost:3333/api/v1/auth/anonymous/$TEST_USER_ACCESS_TOKEN
-# -> { "authToken": "eyJ..." }
-
-# 7. Chat UI
+# 5. Chat UI (enter demo-token-2026 when prompted)
 open http://localhost:3333/api/v1/agent/ui
 
-# 8. Run golden evals (requires ANTHROPIC_API_KEY + TEST_USER_ACCESS_TOKEN in env)
-TEST_USER_ACCESS_TOKEN=<token> \
-  npx evalite run evals/golden/agent-golden.eval.ts
-
-# 9. Eval dashboard (http://localhost:3006)
-TEST_USER_ACCESS_TOKEN=<token> \
-  npx evalite serve evals/golden/agent-golden.eval.ts
-
-# 10. Check metrics
+# 6. Check metrics
+curl http://localhost:3333/api/v1/auth/anonymous/demo-token-2026
+# Use the returned JWT:
 curl -H "Authorization: Bearer <jwt>" http://localhost:3333/api/v1/agent/metrics?since=1h
 ```
 
-### Against Render
+### Evals
 
 ```bash
-# Seed test user on Render (only needed once)
-API_BASE=https://ghostfolio-4eid.onrender.com ./scripts/seed-test-portfolio.sh
-
-# Run golden evals
-API_BASE=https://ghostfolio-4eid.onrender.com \
-  TEST_USER_ACCESS_TOKEN=<token> \
+# Golden set (requires ANTHROPIC_API_KEY + TEST_USER_ACCESS_TOKEN in env)
+TEST_USER_ACCESS_TOKEN=demo-token-2026 \
   npx evalite run evals/golden/agent-golden.eval.ts
 
-# Eval dashboard (http://localhost:3006)
+# Scenarios
+TEST_USER_ACCESS_TOKEN=demo-token-2026 \
+  npx evalite run evals/scenarios/agent-scenarios.eval.ts
+
+# Against Render
 API_BASE=https://ghostfolio-4eid.onrender.com \
-  TEST_USER_ACCESS_TOKEN=<token> \
-  npx evalite serve evals/golden/agent-golden.eval.ts
+  TEST_USER_ACCESS_TOKEN=demo-token-2026 \
+  npx evalite run evals/golden/agent-golden.eval.ts
 ```
 
-> **Note**: Without `API_BASE`, evals default to `http://localhost:3333`. Make sure either the local server is running or `API_BASE` points to Render.
+> **Note**: Without `API_BASE`, evals default to `http://localhost:3333`.
 
 ---
 
@@ -241,5 +274,5 @@ Metrics snapshot (production, 1h window):
 | 5   | Conversation history across turns       | PASS   | "What is its current price?" correctly resolved to VOO from prior turn                                               |
 | 6   | Basic error handling                    | PASS   | 401 on bad auth, tool errors caught, clean 500s                                                                      |
 | 7   | Domain-specific verification            | PASS   | Rejects trades ("read-only"), rejects advice, rejects role-play                                                      |
-| 8   | 5+ eval test cases                      | PASS   | 18 golden (100%) + 30 scenarios                                                                                      |
+| 8   | 5+ eval test cases                      | PASS   | 19 golden (100%) + 33 scenarios = 52 total                                                                           |
 | 9   | Deployed + publicly accessible          | PASS   | https://ghostfolio-4eid.onrender.com, health OK                                                                      |

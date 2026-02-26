@@ -1,0 +1,16 @@
+Date,Symbol,DataSource,Currency,Price,Quantity,Type,Fee,Note
+2024-01-05,bitcoin,COINGECKO,USD,44200.00,0.50,buy,0,BTC core position
+2024-02-01,ethereum,COINGECKO,USD,2350.00,5.00,buy,0,ETH accumulation
+2024-02-15,solana,COINGECKO,USD,105.00,50.00,buy,0,SOL bet
+2024-03-10,bitcoin,COINGECKO,USD,68500.00,0.25,buy,0,Added before halving
+2024-04-01,chainlink,COINGECKO,USD,18.50,200.00,buy,0,LINK oracle play
+2024-05-15,ethereum,COINGECKO,USD,3050.00,3.00,buy,0,ETH DCA
+2024-06-20,solana,COINGECKO,USD,135.00,30.00,buy,0,SOL add
+2024-07-10,uniswap,COINGECKO,USD,8.25,500.00,buy,0,DeFi exposure
+2024-09-01,bitcoin,COINGECKO,USD,58000.00,0.10,buy,0,Monthly DCA
+2024-10-15,ethereum,COINGECKO,USD,2600.00,2.00,buy,0,
+2024-11-01,solana,COINGECKO,USD,175.00,20.00,buy,0,
+2024-12-10,bitcoin,COINGECKO,USD,97500.00,0.15,buy,0,
+2025-01-05,ethereum,COINGECKO,USD,3400.00,1.50,sell,0,Took some profit
+2025-01-20,solana,COINGECKO,USD,210.00,25.00,sell,0,Trimmed SOL
+2025-02-10,bitcoin,COINGECKO,USD,96000.00,0.10,buy,0,Monthly DCA
