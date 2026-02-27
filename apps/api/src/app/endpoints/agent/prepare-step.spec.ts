@@ -1,8 +1,9 @@
-import type { PrepareStepResult, StepResult, ToolSet } from 'ai';
+import type { ModelMessage, PrepareStepResult, StepResult, ToolSet } from 'ai';
 
 import {
   createPrepareStep,
   getToolCallHistory,
+  getToolCallsFromMessages,
   hasBeenCalled,
   loadSkills
 } from './prepare-step';
@@ -72,6 +73,47 @@ describe('hasBeenCalled', () => {
 
   it('returns false when tool is not in history', () => {
     expect(hasBeenCalled(['market_data'], 'account_manage')).toBe(false);
+  });
+});
+
+function makeMessage(
+  role: 'assistant' | 'user',
+  toolNames?: string[]
+): ModelMessage {
+  if (role === 'user') {
+    return { role: 'user', content: [{ type: 'text', text: 'hello' }] };
+  }
+
+  const content: any[] = [{ type: 'text', text: 'response' }];
+
+  for (const toolName of toolNames ?? []) {
+    content.push({
+      type: 'tool-call',
+      toolCallId: 'tc-1',
+      toolName,
+      args: {}
+    });
+  }
+
+  return { role: 'assistant', content };
+}
+
+describe('getToolCallsFromMessages', () => {
+  it('extracts tool names from assistant messages', () => {
+    const messages = [
+      makeMessage('user'),
+      makeMessage('assistant', ['account_manage']),
+      makeMessage('user'),
+    ];
+    expect(getToolCallsFromMessages(messages)).toEqual(['account_manage']);
+  });
+
+  it('ignores user messages', () => {
+    expect(getToolCallsFromMessages([makeMessage('user')])).toEqual([]);
+  });
+
+  it('returns empty for no messages', () => {
+    expect(getToolCallsFromMessages([])).toEqual([]);
   });
 });
 
@@ -155,6 +197,23 @@ describe('createPrepareStep', () => {
     expect(result.activeTools).not.toContain('activity_manage');
   });
 
+  it('includes activity_manage when account_manage was called in prior turn', () => {
+    const messages = [
+      makeMessage('user'),
+      makeMessage('assistant', ['account_manage']),
+      makeMessage('user'),
+    ];
+    const result = callPrepareStep(prepareStep, {
+      steps: [],
+      stepNumber: 0,
+      model: {} as any,
+      messages: messages as ModelMessage[],
+      experimental_context: undefined
+    });
+
+    expect(result.activeTools).toContain('activity_manage');
+  });
+
   it('includes transaction skill in system prompt on step 0', () => {
     const result = callPrepareStep(prepareStep, {
       steps: [],
@@ -209,5 +268,32 @@ describe('createPrepareStep', () => {
     expect(system).toContain(BASE);
     expect(system).toContain('WRITE SAFETY RULES');
     expect(system).not.toContain('MARKET DATA LOOKUPS');
+  });
+
+  it('includes activity_manage when priorToolHistory contains account_manage', () => {
+    const withHistory = createPrepareStep(skills, BASE, ['account_manage']);
+    const result = callPrepareStep(withHistory, {
+      steps: [],
+      stepNumber: 0,
+      model: {} as any,
+      messages: [],
+      experimental_context: undefined
+    });
+
+    expect(result.activeTools).toContain('activity_manage');
+  });
+
+  it('includes market-data skill when priorToolHistory contains market_data', () => {
+    const withHistory = createPrepareStep(skills, BASE, ['market_data']);
+    const result = callPrepareStep(withHistory, {
+      steps: [],
+      stepNumber: 0,
+      model: {} as any,
+      messages: [],
+      experimental_context: undefined
+    });
+
+    const system = result.system as string;
+    expect(system).toContain('MARKET DATA LOOKUPS');
   });
 });
