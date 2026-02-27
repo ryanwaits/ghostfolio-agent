@@ -99,7 +99,10 @@ export function createAccountManageTool({
               return { error: 'Account not found or does not belong to you' };
             }
 
-            const data: Record<string, any> = { id: input.accountId };
+            const data: Record<string, any> = {
+              id: input.accountId,
+              user: { connect: { id: userId } }
+            };
 
             if (input.name !== undefined) {
               data.name = input.name;
@@ -119,6 +122,10 @@ export function createAccountManageTool({
 
             if (input.isExcluded !== undefined) {
               data.isExcluded = input.isExcluded;
+            }
+
+            if (existing.platformId) {
+              data.platform = { connect: { id: existing.platformId } };
             }
 
             const account = await accountService.updateAccount(
