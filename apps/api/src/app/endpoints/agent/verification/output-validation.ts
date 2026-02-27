@@ -10,6 +10,14 @@ const FORWARD_LOOKING_PATTERNS =
   /\b(will|should|expect|predict|forecast|going to|likely to)\b.*\b(grow|rise|fall|drop|increase|decrease|return)\b/i;
 const DISCLAIMER_PATTERNS =
   /not (financial|investment) advice|past performance|no guarantee/i;
+const WRITE_CLAIM_PATTERNS =
+  /\b(created|deleted|removed|updated|transferred|recorded|added)\b/i;
+const WRITE_TOOLS = [
+  'account_manage',
+  'activity_manage',
+  'watchlist_manage',
+  'tag_manage'
+];
 
 export function validateOutput({
   text,
@@ -55,6 +63,19 @@ export function validateOutput({
       passed++;
     } else {
       issues.push('Forward-looking language without disclaimer');
+    }
+  }
+
+  // Write action claim: if response claims a write action, verify a write tool was called
+  if (WRITE_CLAIM_PATTERNS.test(text)) {
+    checks++;
+    const hasWriteTool = toolCalls.some((tc) => WRITE_TOOLS.includes(tc));
+    if (hasWriteTool) {
+      passed++;
+    } else {
+      issues.push(
+        'Response claims a write action but no write tool was called'
+      );
     }
   }
 
