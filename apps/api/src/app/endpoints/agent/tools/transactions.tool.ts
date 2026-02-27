@@ -55,6 +55,7 @@ export function createTransactionHistoryTool({
         return {
           count,
           activities: activities.map((a) => ({
+            id: a.id,
             date: a.date,
             type: a.type,
             symbol: a.SymbolProfile?.symbol,
