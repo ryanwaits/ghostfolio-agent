@@ -1,7 +1,10 @@
+import { AccountService } from '@ghostfolio/api/app/account/account.service';
+import { WatchlistService } from '@ghostfolio/api/app/endpoints/watchlist/watchlist.service';
 import { OrderService } from '@ghostfolio/api/app/order/order.service';
 import { PortfolioService } from '@ghostfolio/api/app/portfolio/portfolio.service';
 import { UserService } from '@ghostfolio/api/app/user/user.service';
 import { DataProviderService } from '@ghostfolio/api/services/data-provider/data-provider.service';
+import { TagService } from '@ghostfolio/api/services/tag/tag.service';
 
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { Injectable, Logger } from '@nestjs/common';
@@ -9,12 +12,16 @@ import { stepCountIs, streamText, type ModelMessage, type UIMessage } from 'ai';
 import { randomUUID } from 'node:crypto';
 
 import { AgentMetricsService } from './agent-metrics.service';
+import { createAccountManageTool } from './tools/account-manage.tool';
+import { createActivityManageTool } from './tools/activity-manage.tool';
 import { createHoldingsLookupTool } from './tools/holdings.tool';
 import { createMarketDataTool } from './tools/market-data.tool';
 import { createPortfolioPerformanceTool } from './tools/performance.tool';
 import { createPortfolioAnalysisTool } from './tools/portfolio.tool';
 import { createSymbolSearchTool } from './tools/symbol-search.tool';
+import { createTagManageTool } from './tools/tag-manage.tool';
 import { createTransactionHistoryTool } from './tools/transactions.tool';
+import { createWatchlistManageTool } from './tools/watchlist-manage.tool';
 import {
   checkHallucination,
   computeConfidence,
@@ -26,13 +33,20 @@ const SYSTEM_PROMPT = `Be extremely concise. Sacrifice grammar for the sake of c
 You are a financial analysis assistant powered by Ghostfolio. You help users understand their investment portfolio through data-driven insights.
 
 RULES:
-- You are read-only. You cannot execute trades or modify the portfolio.
+- You can read AND write portfolio data. You can create/update/delete accounts, transactions, watchlist items, and tags.
 - Never provide investment advice. Always include "This is not financial advice" when making forward-looking statements.
 - Only reference data returned by your tools. Never fabricate numbers or holdings.
 - If a tool call fails, tell the user honestly rather than guessing.
 - Be concise and data-focused. Use tables and bullet points for clarity.
 - When presenting monetary values, use the user's base currency.
 - When presenting percentages, round to 2 decimal places.
+
+WRITE SAFETY RULES:
+- Before any DELETE action, confirm with the user first. State what will be deleted and ask "Shall I proceed?"
+- Before creating a transaction, summarize the details (type, symbol, qty, price, date, account) and ask for confirmation.
+- For account transfers, confirm the from/to accounts and amount before executing.
+- After any write action, briefly confirm what was done (e.g., "Created BUY order: 10 AAPL @ $185.00").
+- Never batch-delete without explicit user consent.
 
 FORMATTING:
 - Never use emojis.
@@ -79,11 +93,14 @@ export class AgentService {
   private readonly logger = new Logger(AgentService.name);
 
   public constructor(
+    private readonly accountService: AccountService,
     private readonly agentMetricsService: AgentMetricsService,
     private readonly dataProviderService: DataProviderService,
     private readonly orderService: OrderService,
     private readonly portfolioService: PortfolioService,
-    private readonly userService: UserService
+    private readonly tagService: TagService,
+    private readonly userService: UserService,
+    private readonly watchlistService: WatchlistService
   ) {}
 
   public chat({
@@ -110,6 +127,16 @@ export class AgentService {
       system: SYSTEM_PROMPT,
       messages: messages as ModelMessage[],
       tools: {
+        account_manage: createAccountManageTool({
+          accountService: this.accountService,
+          userId
+        }),
+        activity_manage: createActivityManageTool({
+          dataProviderService: this.dataProviderService,
+          orderService: this.orderService,
+          userService: this.userService,
+          userId
+        }),
         portfolio_analysis: createPortfolioAnalysisTool({
           portfolioService: this.portfolioService,
           userId
@@ -130,13 +157,21 @@ export class AgentService {
           userService: this.userService,
           userId
         }),
+        tag_manage: createTagManageTool({
+          tagService: this.tagService,
+          userId
+        }),
         transaction_history: createTransactionHistoryTool({
           orderService: this.orderService,
           userService: this.userService,
           userId
+        }),
+        watchlist_manage: createWatchlistManageTool({
+          watchlistService: this.watchlistService,
+          userId
         })
       },
-      stopWhen: stepCountIs(6),
+      stopWhen: stepCountIs(10),
       onStepFinish: ({ toolCalls, usage, finishReason, stepNumber }) => {
         const toolNames = toolCalls.map((tc) => tc.toolName);
         this.logger.log(
@@ -212,7 +247,7 @@ export class AgentService {
           toolCallCount: allTools.length,
           toolErrorCount: toolErrors.length,
           stepCount: steps.length,
-          maxSteps: 6,
+          maxSteps: 10,
           validation,
           hallucination
         });
