@@ -29,46 +29,45 @@ const PRIMARY_FILL = 'rgba(77, 182, 172, 0.1)';
 export class ChartInitializer {
   private observer: MutationObserver | null = null;
   private charts = new Map<HTMLCanvasElement, Chart>();
+  private container: HTMLElement | null = null;
 
   attach(container: HTMLElement) {
-    this.observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of Array.from(mutation.addedNodes)) {
-          if (node instanceof HTMLElement) {
-            const canvases = node.querySelectorAll<HTMLCanvasElement>(
-              'canvas.c-chart-canvas'
-            );
-            canvases.forEach((c) => this.initCanvas(c));
+    this.container = container;
 
-            // Also check if the node itself is a canvas
-            if (
-              node instanceof HTMLCanvasElement &&
-              node.classList.contains('c-chart-canvas')
-            ) {
-              this.initCanvas(node);
-            }
-          }
-        }
-      }
-    });
-
+    this.observer?.disconnect();
+    this.observer = new MutationObserver(() => this.scan());
     this.observer.observe(container, { childList: true, subtree: true });
 
-    // Init any already-present canvases
-    container
-      .querySelectorAll<HTMLCanvasElement>('canvas.c-chart-canvas')
-      .forEach((c) => this.initCanvas(c));
+    this.scan();
   }
 
   reattach(container: HTMLElement) {
-    this.observer?.disconnect();
-    this.observer = null;
     this.attach(container);
+  }
+
+  /**
+   * Scan for uninitialized canvases and clean up stale chart references.
+   * Safe to call repeatedly — idempotent.
+   */
+  scan() {
+    // Clean up charts whose canvas was removed from the DOM
+    for (const [canvas, chart] of this.charts) {
+      if (!canvas.isConnected) {
+        chart.destroy();
+        this.charts.delete(canvas);
+      }
+    }
+
+    // Initialize any new canvases
+    this.container
+      ?.querySelectorAll<HTMLCanvasElement>('canvas.c-chart-canvas')
+      .forEach((c) => this.initCanvas(c));
   }
 
   detach() {
     this.observer?.disconnect();
     this.observer = null;
+    this.container = null;
     this.charts.forEach((chart) => chart.destroy());
     this.charts.clear();
   }

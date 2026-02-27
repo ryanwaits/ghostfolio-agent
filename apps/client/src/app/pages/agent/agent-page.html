@@ -9,13 +9,52 @@
     </div>
     <div class="conversation-list">
         @for (conversation of conversations; track conversation.id) {
-          <button
-            class="conversation-item"
-            [class.active]="activeConversation?.id === conversation.id"
-            (click)="onSelectConversation(conversation)"
-          >
-            <span class="conversation-title">{{ conversation.title }}</span>
-          </button>
+          <div class="conversation-item-wrapper">
+            @if (renamingId === conversation.id) {
+              <input
+                class="rename-input"
+                [value]="renameValue"
+                (input)="renameValue = $any($event.target).value"
+                (keydown)="onRenameKeydown($event, conversation)"
+                (blur)="confirmRename(conversation)"
+                (click)="$event.stopPropagation()"
+                autofocus
+              />
+            } @else {
+              <button
+                class="conversation-item"
+                [class.active]="activeConversation?.id === conversation.id"
+                (click)="onSelectConversation(conversation)"
+              >
+                @if (conversation.pinned) {
+                  <ion-icon class="pin-badge" name="pin-outline" />
+                }
+                <span class="conversation-title">{{ conversation.title }}</span>
+              </button>
+              <button
+                class="context-menu-trigger"
+                (click)="toggleMenu($event, conversation.id)"
+              >
+                <ion-icon name="ellipsis-vertical-outline" />
+              </button>
+              @if (openMenuId === conversation.id) {
+                <div class="context-menu" (click)="$event.stopPropagation()">
+                  <button class="context-menu-item" (click)="startRename($event, conversation)">
+                    <ion-icon name="create-outline" size="small" />
+                    <span i18n>Rename</span>
+                  </button>
+                  <button class="context-menu-item" (click)="togglePin($event, conversation)">
+                    <ion-icon name="pin-outline" size="small" />
+                    <span>{{ conversation.pinned ? 'Unpin' : 'Pin' }}</span>
+                  </button>
+                  <button class="context-menu-item delete" (click)="deleteConversation($event, conversation)">
+                    <ion-icon name="trash-outline" size="small" />
+                    <span i18n>Delete</span>
+                  </button>
+                </div>
+              }
+            }
+          </div>
         }
         @if (conversations.length === 0) {
           <div class="no-conversations" i18n>No conversations yet</div>
@@ -59,8 +98,8 @@
               [class.assistant]="message.role === 'assistant'"
             >
               <div class="bubble-wrapper">
-                @if (message.isStreaming && message.activeTools?.length && !message.content) {
-                  <div class="tool-indicator">
+                @if (message.activeTools?.length) {
+                  <div class="tool-indicator" [class.completed]="!message.isStreaming">
                     @for (tool of message.activeTools; track tool) {
                       <span class="tool-label"><code>{{ tool }}</code></span>
                     }

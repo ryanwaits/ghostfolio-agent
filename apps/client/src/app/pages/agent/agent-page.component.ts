@@ -10,6 +10,7 @@ import {
   Component,
   CUSTOM_ELEMENTS_SCHEMA,
   ElementRef,
+  HostListener,
   OnDestroy,
   OnInit,
   ViewChild
@@ -27,13 +28,17 @@ import {
   chatbubbleEllipsesOutline,
   chatbubbleOutline,
   copyOutline,
+  createOutline,
   ellipsisHorizontalOutline,
+  ellipsisVerticalOutline,
   linkOutline,
   pieChartOutline,
+  pinOutline,
   sendOutline,
   swapHorizontalOutline,
   thumbsDownOutline,
-  thumbsUpOutline
+  thumbsUpOutline,
+  trashOutline
 } from 'ionicons/icons';
 import { Subject, takeUntil } from 'rxjs';
 
@@ -55,6 +60,7 @@ interface Conversation {
   title: string;
   messages: ChatMessage[];
   createdAt: Date;
+  pinned?: boolean;
 }
 
 interface PromptCard {
@@ -82,6 +88,9 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
   public inputValue = '';
   public isLoading = false;
   public user: User;
+  public openMenuId: string | null = null;
+  public renamingId: string | null = null;
+  public renameValue = '';
 
   public promptCards: PromptCard[] = [
     {
@@ -133,13 +142,17 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
       chatbubbleEllipsesOutline,
       chatbubbleOutline,
       copyOutline,
+      createOutline,
       ellipsisHorizontalOutline,
+      ellipsisVerticalOutline,
       linkOutline,
       pieChartOutline,
+      pinOutline,
       sendOutline,
       swapHorizontalOutline,
       thumbsDownOutline,
-      thumbsUpOutline
+      thumbsUpOutline,
+      trashOutline
     });
   }
 
@@ -153,13 +166,15 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       });
 
-    this.loadMarked().then(() => this.restoreConversations());
+    this.loadMarked().then(() => {
+      this.restoreConversations();
+      this.focusInput();
+      this.ensureChartObserver();
+    });
   }
 
   public ngAfterViewInit() {
-    if (this.messagesContainer?.nativeElement) {
-      this.chartInitializer.attach(this.messagesContainer.nativeElement);
-    }
+    this.ensureChartObserver();
   }
 
   public ngOnDestroy() {
@@ -167,6 +182,14 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.clearRenderInterval();
     this.unsubscribeSubject.next();
     this.unsubscribeSubject.complete();
+  }
+
+  @HostListener('document:click')
+  public onDocumentClick() {
+    if (this.openMenuId) {
+      this.openMenuId = null;
+      this.changeDetectorRef.markForCheck();
+    }
   }
 
   public onNewChat() {
@@ -177,7 +200,65 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
       createdAt: new Date()
     };
     this.conversations.unshift(conversation);
+    this.sortConversations();
     this.activeConversation = conversation;
+    this.persistConversations();
+    this.changeDetectorRef.markForCheck();
+    this.focusInput();
+  }
+
+  public toggleMenu(event: Event, id: string) {
+    event.stopPropagation();
+    this.openMenuId = this.openMenuId === id ? null : id;
+    this.changeDetectorRef.markForCheck();
+  }
+
+  public startRename(event: Event, conversation: Conversation) {
+    event.stopPropagation();
+    this.openMenuId = null;
+    this.renamingId = conversation.id;
+    this.renameValue = conversation.title;
+    this.changeDetectorRef.markForCheck();
+  }
+
+  public confirmRename(conversation: Conversation) {
+    const trimmed = this.renameValue.trim();
+    if (trimmed) {
+      conversation.title = trimmed;
+    }
+    this.renamingId = null;
+    this.persistConversations();
+    this.changeDetectorRef.markForCheck();
+  }
+
+  public onRenameKeydown(event: KeyboardEvent, conversation: Conversation) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.confirmRename(conversation);
+    } else if (event.key === 'Escape') {
+      this.renamingId = null;
+      this.changeDetectorRef.markForCheck();
+    }
+  }
+
+  public togglePin(event: Event, conversation: Conversation) {
+    event.stopPropagation();
+    this.openMenuId = null;
+    conversation.pinned = !conversation.pinned;
+    this.sortConversations();
+    this.persistConversations();
+    this.changeDetectorRef.markForCheck();
+  }
+
+  public deleteConversation(event: Event, conversation: Conversation) {
+    event.stopPropagation();
+    this.openMenuId = null;
+    this.conversations = this.conversations.filter(
+      (c) => c.id !== conversation.id
+    );
+    if (this.activeConversation?.id === conversation.id) {
+      this.activeConversation = null;
+    }
     this.persistConversations();
     this.changeDetectorRef.markForCheck();
   }
@@ -185,6 +266,8 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
   public onSelectConversation(conversation: Conversation) {
     this.activeConversation = conversation;
     this.changeDetectorRef.markForCheck();
+    this.focusInput();
+    this.ensureChartObserver();
   }
 
   public onPromptCardClick(card: PromptCard) {
@@ -365,7 +448,6 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.ensureChartObserver();
 
     let fullText = '';
-    let shouldAutoScroll = true;
 
     // Start render interval — batches token deltas at ~12fps
     this.renderDirty = false;
@@ -376,16 +458,14 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
       this.renderDirty = false;
 
       if (this.marked && this.remend) {
+        const streamSafe = this.stripTrailingFencedBlock(fullText);
         assistantMessage.html = this.toSafeHtml(
-          this.marked.parse(this.normalizeMarkdown(this.remend(fullText))) as string
+          this.marked.parse(this.normalizeMarkdown(this.remend(streamSafe))) as string
         );
       }
 
       this.changeDetectorRef.markForCheck();
-
-      if (shouldAutoScroll) {
-        this.scrollToBottom();
-      }
+      this.scrollToBottom();
     }, 80);
 
     const streamStart = Date.now();
@@ -395,6 +475,11 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
       const conversationMessages = this.activeConversation.messages
         .filter((m) => m.content)
         .map((m) => ({ role: m.role, content: m.content }));
+      const toolHistory = [
+        ...new Set(
+          this.activeConversation.messages.flatMap((m) => m.activeTools || [])
+        )
+      ];
 
       const response = await fetch('/api/v1/agent/chat', {
         method: 'POST',
@@ -402,7 +487,10 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ messages: conversationMessages })
+        body: JSON.stringify({
+          messages: conversationMessages,
+          toolHistory: toolHistory.length > 0 ? toolHistory : undefined
+        })
       });
 
       if (!response.ok) {
@@ -437,20 +525,20 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
           try {
             const evt = JSON.parse(data);
 
-            if (evt.type === 'tool-call' || evt.type === 'tool-input-start') {
-              const label = evt.toolName;
+            if (evt.toolName && typeof evt.toolName === 'string') {
               if (!assistantMessage.activeTools) {
                 assistantMessage.activeTools = [];
               }
-              if (!assistantMessage.activeTools.includes(label)) {
-                assistantMessage.activeTools.push(label);
+              if (!assistantMessage.activeTools.includes(evt.toolName)) {
+                assistantMessage.activeTools.push(evt.toolName);
                 this.changeDetectorRef.markForCheck();
               }
-            } else if (evt.type === 'text-delta') {
+            }
+
+            if (evt.type === 'text-delta') {
               fullText += evt.delta;
               assistantMessage.content = fullText;
               this.renderDirty = true;
-              shouldAutoScroll = this.isNearBottom();
             } else if (
               (evt.type === 'finish' || evt.type === 'message-metadata') &&
               evt.messageMetadata?.requestId
@@ -494,6 +582,9 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
           this.marked.parse(this.normalizeMarkdown(fullText)) as string
         );
       }
+
+      // Re-scan for chart canvases after final innerHTML update
+      setTimeout(() => this.chartInitializer.scan());
     } catch (err) {
       this.clearRenderInterval();
       assistantMessage.content = `Error: ${err.message}`;
@@ -505,7 +596,15 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.persistConversations();
     this.changeDetectorRef.markForCheck();
     this.scrollToBottom();
-    this.messageInput?.nativeElement?.focus();
+    this.focusInput();
+  }
+
+  private sortConversations() {
+    this.conversations.sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   }
 
   private persistConversations() {
@@ -516,9 +615,11 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
           id: c.id,
           title: c.title,
           createdAt: c.createdAt,
+          pinned: c.pinned || false,
           messages: c.messages.map((m) => ({
             role: m.role,
             content: m.content,
+            activeTools: m.activeTools,
             requestId: m.requestId,
             feedbackRating: m.feedbackRating,
             latencyMs: m.latencyMs
@@ -545,9 +646,10 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
       const { activeId, conversations } = JSON.parse(raw);
 
       this.conversations = (conversations || []).map(
-        (c: { id: string; title: string; createdAt: string; messages: ChatMessage[] }) => ({
+        (c: { id: string; title: string; createdAt: string; pinned?: boolean; messages: ChatMessage[] }) => ({
           ...c,
           createdAt: new Date(c.createdAt),
+          pinned: c.pinned || false,
           messages: c.messages.map((m: ChatMessage) => ({
             ...m,
             html:
@@ -557,6 +659,8 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
           }))
         })
       );
+
+      this.sortConversations();
 
       if (activeId) {
         this.activeConversation =
@@ -602,14 +706,6 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
     return html;
   }
 
-  private isNearBottom(threshold = 50): boolean {
-    const el = this.messagesContainer?.nativeElement;
-    if (!el) {
-      return true;
-    }
-    return el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
-  }
-
   private clearRenderInterval() {
     if (this.renderInterval) {
       clearInterval(this.renderInterval);
@@ -620,7 +716,7 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
   private ensureChartObserver() {
     setTimeout(() => {
       if (this.messagesContainer?.nativeElement) {
-        this.chartInitializer.reattach(this.messagesContainer.nativeElement);
+        this.chartInitializer.attach(this.messagesContainer.nativeElement);
       }
     });
   }
@@ -631,6 +727,24 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
         this.messagesContainer.nativeElement.scrollTop =
           this.messagesContainer.nativeElement.scrollHeight;
       }
+    });
+  }
+
+  /**
+   * Strip any trailing ```suggestions block during streaming so it
+   * only renders in the final pass (avoids flicker from partial tokens).
+   */
+  private stripTrailingFencedBlock(text: string): string {
+    const idx = text.lastIndexOf('```suggestions');
+    if (idx === -1) {
+      return text;
+    }
+    return text.slice(0, idx).trimEnd();
+  }
+
+  private focusInput() {
+    setTimeout(() => {
+      this.messageInput?.nativeElement?.focus();
     });
   }
 }
