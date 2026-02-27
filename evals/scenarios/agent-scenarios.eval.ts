@@ -196,15 +196,15 @@ const accountManage = [
 const activityManage = [
   {
     input: 'Record a buy of 10 AAPL at $185 on 2026-02-20 in USD',
-    expected: 'activity_manage'
+    expected: 'account_manage,activity_manage'
   },
   {
     input: 'Log a $50 dividend from MSFT on 2026-01-15',
-    expected: 'activity_manage'
+    expected: 'account_manage,activity_manage'
   },
   {
     input: 'I sold 5 shares of TSLA at $250 yesterday',
-    expected: 'activity_manage'
+    expected: 'account_manage,activity_manage'
   },
   {
     input: 'Update my last AAPL buy to 15 shares',
@@ -216,7 +216,7 @@ const activityManage = [
   },
   {
     input: 'Add a $10 fee for my last trade',
-    expected: 'activity_manage'
+    expected: 'transaction_history,account_manage,activity_manage'
   },
   {
     input: 'Buy AAPL',
@@ -224,7 +224,15 @@ const activityManage = [
   },
   {
     input: 'Record buying 100 shares of bitcoin at $95k',
-    expected: 'activity_manage'
+    expected: 'account_manage,activity_manage'
+  },
+  {
+    input: 'Record buying 0.5 ETH at $3200 today',
+    expected: 'symbol_search,account_manage,activity_manage'
+  },
+  {
+    input: 'Change the quantity on my last MSFT buy to 20 shares',
+    expected: 'transaction_history,activity_manage'
   }
 ];
 
