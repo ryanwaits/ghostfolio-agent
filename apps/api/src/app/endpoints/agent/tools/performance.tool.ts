@@ -18,7 +18,12 @@ export function createPortfolioPerformanceTool({
       dateRange: z
         .enum(['1d', '1y', '5y', 'max', 'mtd', 'wtd', 'ytd'])
         .optional()
-        .describe('Time range. Defaults to max (all time).')
+        .describe(
+          'Time range for performance data. Defaults to max (all time). ' +
+            'If the user asks for a range that doesn\'t exactly match (e.g. "last 3 months", "since October"), ' +
+            'pick the closest range that fully covers their request and filter/summarize the relevant portion in your response. ' +
+            'Never refuse a request just because the exact range isn\'t available.'
+        )
     }),
     execute: async ({ dateRange = 'max' }) => {
       try {
