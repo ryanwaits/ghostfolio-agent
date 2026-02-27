@@ -8,10 +8,18 @@ import { TagService } from '@ghostfolio/api/services/tag/tag.service';
 
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { Injectable, Logger } from '@nestjs/common';
-import { stepCountIs, streamText, type ModelMessage, type UIMessage } from 'ai';
+import {
+  ToolLoopAgent,
+  stepCountIs,
+  type ModelMessage,
+  type PrepareStepFunction,
+  type UIMessage
+} from 'ai';
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 
 import { AgentMetricsService } from './agent-metrics.service';
+import { createPrepareStep, loadSkills } from './prepare-step';
 import { createAccountManageTool } from './tools/account-manage.tool';
 import { createActivityManageTool } from './tools/activity-manage.tool';
 import { createHoldingsLookupTool } from './tools/holdings.tool';
@@ -28,7 +36,7 @@ import {
   validateOutput
 } from './verification';
 
-const SYSTEM_PROMPT = `Be extremely concise. Sacrifice grammar for the sake of concision.
+const BASE_INSTRUCTIONS = `Be extremely concise. Sacrifice grammar for the sake of concision.
 
 You are a financial analysis assistant powered by Ghostfolio. You help users understand their investment portfolio through data-driven insights.
 
@@ -41,13 +49,6 @@ RULES:
 - When presenting monetary values, use the user's base currency.
 - When presenting percentages, round to 2 decimal places.
 
-WRITE SAFETY RULES:
-- Before any DELETE action, confirm with the user first. State what will be deleted and ask "Shall I proceed?"
-- Before creating a transaction, summarize the details (type, symbol, qty, price, date, account) and ask for confirmation.
-- For account transfers, confirm the from/to accounts and amount before executing.
-- After any write action, briefly confirm what was done (e.g., "Created BUY order: 10 AAPL @ $185.00").
-- Never batch-delete without explicit user consent.
-
 FORMATTING:
 - Never use emojis.
 - Structure data responses with a clear markdown heading (e.g., "## Portfolio Performance (YTD)").
@@ -56,7 +57,7 @@ FORMATTING:
 - Use **bold** for key metrics mentioned inline. Never use ALL CAPS for emphasis.
 - Format currency with commas and two decimals (e.g., $48,210.45).
 - Round percentages to two decimal places. Prefix positive returns with +.
-- Keep responses focused — no filler, no disclaimers unless discussing forward-looking statements.
+- Keep responses focused -- no filler, no disclaimers unless discussing forward-looking statements.
 
 RICH FORMATTING (use these custom fenced blocks when the data fits):
 
@@ -78,19 +79,12 @@ RICH FORMATTING (use these custom fenced blocks when the data fits):
    \`\`\`
 
 4. Sparklines for trends: \`\`\`sparkline with title and comma-separated values.
-5. Charts when user asks to visualize: \`\`\`chart-area or \`\`\`chart-bar with "Label: Value" per line.
-
-MARKET DATA LOOKUPS:
-- For stocks and ETFs: use dataSource "YAHOO" with uppercase ticker symbols (e.g. "AAPL", "TSLA", "MSFT").
-- For cryptocurrencies: use dataSource "COINGECKO" with the CoinGecko lowercase slug ID. Do NOT use ticker symbols like "BTC" or "STX" with CoinGecko — use the full lowercase slug.
-- Well-known CoinGecko slugs you can use directly: "bitcoin", "ethereum", "solana".
-- For ANY other cryptocurrency, use the symbol_search tool first to find the correct CoinGecko slug. CoinGecko slugs are often non-obvious (e.g. "blockstack" for Stacks, "avalanche-2" for Avalanche, "matic-network" for Polygon).
-- If symbol_search returns multiple matches, present the options to the user and let them choose before calling market_data.
-- If unsure whether something is a crypto or stock, use symbol_search to find out.`;
+5. Charts when user asks to visualize: \`\`\`chart-area or \`\`\`chart-bar with "Label: Value" per line.`;
 
 @Injectable()
 export class AgentService {
   private readonly logger = new Logger(AgentService.name);
+  private readonly skills: ReturnType<typeof loadSkills>;
 
   public constructor(
     private readonly accountService: AccountService,
@@ -101,13 +95,17 @@ export class AgentService {
     private readonly tagService: TagService,
     private readonly userService: UserService,
     private readonly watchlistService: WatchlistService
-  ) {}
+  ) {
+    this.skills = loadSkills(join(__dirname, 'skills'));
+  }
 
-  public chat({
+  public async chat({
     messages,
+    toolHistory,
     userId
   }: {
     messages: ModelMessage[] | UIMessage[];
+    toolHistory?: string[];
     userId: string;
   }) {
     const requestId = randomUUID();
@@ -122,55 +120,20 @@ export class AgentService {
       })
     );
 
-    const result = streamText({
+    const tools = this.buildTools(userId);
+    const prepareStep = createPrepareStep(
+      this.skills,
+      BASE_INSTRUCTIONS,
+      toolHistory
+    );
+
+    const agent = new ToolLoopAgent({
       model: createAnthropic()('claude-sonnet-4-6'),
-      system: SYSTEM_PROMPT,
-      messages: messages as ModelMessage[],
-      tools: {
-        account_manage: createAccountManageTool({
-          accountService: this.accountService,
-          userId
-        }),
-        activity_manage: createActivityManageTool({
-          dataProviderService: this.dataProviderService,
-          orderService: this.orderService,
-          userService: this.userService,
-          userId
-        }),
-        portfolio_analysis: createPortfolioAnalysisTool({
-          portfolioService: this.portfolioService,
-          userId
-        }),
-        portfolio_performance: createPortfolioPerformanceTool({
-          portfolioService: this.portfolioService,
-          userId
-        }),
-        holdings_lookup: createHoldingsLookupTool({
-          portfolioService: this.portfolioService,
-          userId
-        }),
-        market_data: createMarketDataTool({
-          dataProviderService: this.dataProviderService
-        }),
-        symbol_search: createSymbolSearchTool({
-          dataProviderService: this.dataProviderService,
-          userService: this.userService,
-          userId
-        }),
-        tag_manage: createTagManageTool({
-          tagService: this.tagService,
-          userId
-        }),
-        transaction_history: createTransactionHistoryTool({
-          orderService: this.orderService,
-          userService: this.userService,
-          userId
-        }),
-        watchlist_manage: createWatchlistManageTool({
-          watchlistService: this.watchlistService,
-          userId
-        })
-      },
+      instructions: BASE_INSTRUCTIONS,
+      tools,
+      prepareStep: prepareStep as unknown as PrepareStepFunction<
+        typeof tools
+      >,
       stopWhen: stepCountIs(10),
       onStepFinish: ({ toolCalls, usage, finishReason, stepNumber }) => {
         const toolNames = toolCalls.map((tc) => tc.toolName);
@@ -185,34 +148,6 @@ export class AgentService {
             tokens: usage
           })
         );
-      },
-      onError: (error) => {
-        const latencyMs = Date.now() - startTime;
-        const message = error instanceof Error ? error.message : String(error);
-
-        this.logger.error(
-          JSON.stringify({
-            event: 'chat_error',
-            requestId,
-            userId,
-            latencyMs,
-            error: message
-          })
-        );
-
-        this.agentMetricsService.record({
-          requestId,
-          userId,
-          latencyMs,
-          totalSteps: 0,
-          toolsUsed: [],
-          promptTokens: 0,
-          completionTokens: 0,
-          totalTokens: 0,
-          errorOccurred: true,
-          errorMessage: message,
-          timestamp: Date.now()
-        });
       },
       onFinish: ({ steps, usage, text }) => {
         const latencyMs = Date.now() - startTime;
@@ -305,6 +240,58 @@ export class AgentService {
       }
     });
 
+    const result = await agent.stream({
+      messages: messages as ModelMessage[]
+    });
+
     return { result, requestId };
+  }
+
+  private buildTools(userId: string) {
+    return {
+      account_manage: createAccountManageTool({
+        accountService: this.accountService,
+        userId
+      }),
+      activity_manage: createActivityManageTool({
+        dataProviderService: this.dataProviderService,
+        orderService: this.orderService,
+        userService: this.userService,
+        userId
+      }),
+      portfolio_analysis: createPortfolioAnalysisTool({
+        portfolioService: this.portfolioService,
+        userId
+      }),
+      portfolio_performance: createPortfolioPerformanceTool({
+        portfolioService: this.portfolioService,
+        userId
+      }),
+      holdings_lookup: createHoldingsLookupTool({
+        portfolioService: this.portfolioService,
+        userId
+      }),
+      market_data: createMarketDataTool({
+        dataProviderService: this.dataProviderService
+      }),
+      symbol_search: createSymbolSearchTool({
+        dataProviderService: this.dataProviderService,
+        userService: this.userService,
+        userId
+      }),
+      tag_manage: createTagManageTool({
+        tagService: this.tagService,
+        userId
+      }),
+      transaction_history: createTransactionHistoryTool({
+        orderService: this.orderService,
+        userService: this.userService,
+        userId
+      }),
+      watchlist_manage: createWatchlistManageTool({
+        watchlistService: this.watchlistService,
+        userId
+      })
+    };
   }
 }
