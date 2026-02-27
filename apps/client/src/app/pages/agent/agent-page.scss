@@ -3,27 +3,70 @@
   flex-direction: column;
   height: calc(100svh - var(--mat-toolbar-standard-height));
   color: rgb(var(--dark-primary-text));
+
+  // Theme-aware custom properties (light defaults)
+  --agent-text: rgba(var(--dark-primary-text));
+  --agent-text-secondary: #6b7280;
+  --agent-text-tertiary: #9ca3af;
+  --agent-bg-surface: white;
+  --agent-bg-input: #f3f4f6;
+  --agent-bg-sidebar: rgba(var(--palette-foreground-base, 0, 0, 0), 0.02);
+  --agent-bg-hover: rgba(var(--palette-foreground-base, 0, 0, 0), 0.04);
+  --agent-bg-hover-strong: rgba(var(--palette-foreground-base, 0, 0, 0), 0.08);
+  --agent-border: #e5e7eb;
+  --agent-bubble-user: #f3f4f6;
+  --agent-ctx-bg: white;
+  --agent-tooltip-bg: #f3f4f6;
+  --agent-shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --agent-shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+  --agent-send-bg: #4db6ac;
+  --agent-send-hover: #3aa198;
+  --agent-send-disabled-bg: #9ca3af;
+  --agent-send-disabled-color: white;
+  --agent-prompt-card-bg: white;
+  --agent-prompt-card-border: transparent;
+  --agent-prompt-card-shadow: var(--agent-shadow-card);
+  --agent-prompt-card-hover-shadow: var(--agent-shadow-float);
+  --agent-input-focus-shadow: 0 0 0 3px #e0f2f1;
+  --agent-rename-shadow: 0 0 0 2px #e0f2f1;
 }
 
 :host-context(.theme-dark) {
   color: rgb(var(--light-primary-text));
+
+  --agent-text: rgba(var(--light-primary-text));
+  --agent-text-secondary: rgba(255, 255, 255, 0.5);
+  --agent-text-tertiary: rgba(255, 255, 255, 0.4);
+  --agent-bg-surface: rgb(var(--dark-background));
+  --agent-bg-input: rgba(255, 255, 255, 0.06);
+  --agent-bg-sidebar: rgba(255, 255, 255, 0.03);
+  --agent-bg-hover: rgba(255, 255, 255, 0.06);
+  --agent-bg-hover-strong: rgba(255, 255, 255, 0.12);
+  --agent-border: rgba(255, 255, 255, 0.12);
+  --agent-bubble-user: rgba(255, 255, 255, 0.08);
+  --agent-ctx-bg: #2a2a2a;
+  --agent-tooltip-bg: #333;
+  --agent-shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+  --agent-shadow-float: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --agent-send-bg: rgba(var(--palette-primary-500), 1);
+  --agent-send-hover: rgba(var(--palette-primary-500), 0.85);
+  --agent-send-disabled-bg: rgba(255, 255, 255, 0.12);
+  --agent-send-disabled-color: rgba(255, 255, 255, 0.3);
+  --agent-prompt-card-bg: rgba(255, 255, 255, 0.05);
+  --agent-prompt-card-border: rgba(255, 255, 255, 0.08);
+  --agent-prompt-card-shadow: none;
+  --agent-prompt-card-hover-shadow: var(--agent-shadow-float);
+  --agent-input-focus-shadow: 0 0 0 3px rgba(77, 182, 172, 0.15);
+  --agent-rename-shadow: 0 0 0 2px rgba(77, 182, 172, 0.15);
 }
 
-// Tokens matching Ghostfolio's aesthetic
+// Tokens
 $primary: #4db6ac;
 $primary-dark: #3aa198;
 $primary-light: #e0f2f1;
-$text-secondary: #6b7280;
-$text-tertiary: #9ca3af;
-$border-color: #e5e7eb;
-$bg-input: #f3f4f6;
 $radius-lg: 16px;
 $radius-md: 12px;
 $radius-sm: 8px;
-$shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05),
-  0 2px 4px -1px rgba(0, 0, 0, 0.03);
-$shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
-  0 4px 6px -2px rgba(0, 0, 0, 0.025);
 
 .agent-container {
   display: flex;
@@ -31,11 +74,10 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   overflow: hidden;
 }
 
-// Sidebar — matches mat-tab-nav-bar header on .page.has-tabs
 .agent-sidebar {
   width: 14rem;
   min-width: 14rem;
-  background: rgba(var(--palette-foreground-base, 0, 0, 0), 0.02);
+  background: var(--agent-bg-sidebar);
   display: flex;
   flex-direction: column;
   padding: 1rem 0;
@@ -45,7 +87,6 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   padding: 0 0.5rem 0.5rem;
 }
 
-// New Chat button — prominent action
 .new-chat-btn {
   display: flex;
   align-items: center;
@@ -56,8 +97,8 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   padding: 0 0.75rem;
   border: none;
   border-radius: $radius-sm;
-  background: rgba(0, 0, 0, 0.04);
-  color: rgba(var(--dark-primary-text));
+  background: var(--agent-bg-hover);
+  color: var(--agent-text);
   font-size: 14px;
   font-weight: 500;
   font-family: inherit;
@@ -68,11 +109,10 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   transition: background 0.15s;
 
   &:hover {
-    background: rgba(var(--palette-foreground-base, 0, 0, 0), 0.08);
+    background: var(--agent-bg-hover-strong);
   }
 }
 
-// Thread list — matches mat-tab-links column layout
 .conversation-list {
   flex: 1;
   overflow-y: auto;
@@ -80,14 +120,13 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   flex-direction: column;
 }
 
-// Conversation wrapper — single hover zone for item + trigger
 .conversation-item-wrapper {
   position: relative;
   border-radius: 4px;
   transition: background 0.15s;
 
   &:hover {
-    background: rgba(var(--palette-foreground-base, 0, 0, 0), 0.04);
+    background: var(--agent-bg-hover);
 
     .context-menu-trigger {
       opacity: 1;
@@ -95,7 +134,6 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   }
 }
 
-// Conversation items — matches mat-tab-link sidebar behavior
 .conversation-item {
   display: flex;
   align-items: center;
@@ -107,7 +145,7 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   background: transparent;
   cursor: pointer;
   text-align: left;
-  color: rgba(var(--dark-primary-text));
+  color: var(--agent-text);
   font-size: 14px;
   font-weight: 400;
   font-family: inherit;
@@ -131,15 +169,13 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   white-space: nowrap;
 }
 
-// Pin badge
 .pin-badge {
   font-size: 12px;
-  color: $text-tertiary;
+  color: var(--agent-text-tertiary);
   flex-shrink: 0;
   margin-right: 4px;
 }
 
-// Context menu trigger — 3-dot button
 .context-menu-trigger {
   position: absolute;
   right: 4px;
@@ -153,23 +189,22 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: $text-tertiary;
+  color: var(--agent-text-tertiary);
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.12s;
   font-size: 16px;
 }
 
-// Context menu dropdown
 .context-menu {
   position: absolute;
   top: 100%;
   right: 4px;
   min-width: 140px;
-  background: white;
-  border: 1px solid $border-color;
+  background: var(--agent-ctx-bg);
+  border: 1px solid var(--agent-border);
   border-radius: $radius-sm;
-  box-shadow: $shadow-float;
+  box-shadow: var(--agent-shadow-float);
   z-index: 100;
   padding: 4px 0;
 }
@@ -182,14 +217,14 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   padding: 6px 12px;
   border: none;
   background: transparent;
-  color: rgba(var(--dark-primary-text));
+  color: var(--agent-text);
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;
   transition: background 0.12s;
 
   &:hover {
-    background: rgba(var(--palette-foreground-base, 0, 0, 0), 0.04);
+    background: var(--agent-bg-hover);
   }
 
   &.delete {
@@ -197,7 +232,6 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   }
 }
 
-// Rename input
 .rename-input {
   display: flex;
   align-items: center;
@@ -206,30 +240,28 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   padding: 0 0.75rem;
   border: 1px solid $primary;
   border-radius: 4px;
-  background: white;
-  color: rgba(var(--dark-primary-text));
+  background: var(--agent-bg-surface);
+  color: var(--agent-text);
   font-size: 14px;
   font-family: inherit;
   outline: none;
-  box-shadow: 0 0 0 2px $primary-light;
+  box-shadow: var(--agent-rename-shadow);
 }
 
 .no-conversations {
   padding: 1rem;
-  color: $text-tertiary;
+  color: var(--agent-text-tertiary);
   font-size: 14px;
 }
 
-// Main area
 .agent-main {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: white;
+  background: var(--agent-bg-surface);
 }
 
-// Chat canvas — matches page content area padding
 .chat-canvas {
   flex: 1;
   overflow-y: auto;
@@ -249,7 +281,6 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   padding-bottom: 24px;
 }
 
-// Empty State
 .empty-state {
   margin: auto;
   text-align: center;
@@ -269,7 +300,7 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   justify-content: center;
   margin: 0 auto 24px;
   color: $primary;
-  box-shadow: $shadow-card;
+  box-shadow: var(--agent-shadow-card);
   font-size: 28px;
 }
 
@@ -281,7 +312,7 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
 
 .empty-subtitle {
   font-size: 15px;
-  color: $text-secondary;
+  color: var(--agent-text-secondary);
   margin-bottom: 32px;
 }
 
@@ -293,11 +324,11 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
 }
 
 .prompt-card {
-  background: white;
+  background: var(--agent-prompt-card-bg);
   padding: 16px;
   border-radius: $radius-md;
-  border: 1px solid transparent;
-  box-shadow: $shadow-card;
+  border: 1px solid var(--agent-prompt-card-border);
+  box-shadow: var(--agent-prompt-card-shadow);
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
@@ -309,7 +340,7 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   &:hover {
     border-color: $primary;
     transform: translateY(-2px);
-    box-shadow: $shadow-float;
+    box-shadow: var(--agent-prompt-card-hover-shadow);
   }
 }
 
@@ -321,11 +352,12 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
 .prompt-text {
   font-size: 14px;
   font-weight: 500;
+  color: var(--agent-text);
 }
 
 .prompt-sub {
   font-size: 12px;
-  color: $text-secondary;
+  color: var(--agent-text-secondary);
 }
 
 // Messages
@@ -363,7 +395,6 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   min-width: 0;
 }
 
-// Tool use indicator — shown while agent is calling tools
 .tool-indicator {
   display: flex;
   flex-direction: column;
@@ -373,13 +404,13 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
 
 .tool-label {
   font-size: 13px;
-  color: $text-secondary;
+  color: var(--agent-text-secondary);
   display: inline-flex;
   align-items: center;
 
   code {
-    background: $primary-light;
-    color: $primary-dark;
+    background: rgba($primary, 0.15);
+    color: $primary;
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 12px;
@@ -398,25 +429,18 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   }
 }
 
-.tool-indicator.completed {
-  .tool-label {
-    opacity: 0.5;
+.tool-indicator.completed .tool-label {
+  opacity: 0.5;
 
-    &::before {
-      animation: none;
-      opacity: 0.5;
-    }
+  &::before {
+    animation: none;
+    opacity: 0.5;
   }
 }
 
 @keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 1;
-  }
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }
 
 .bubble {
@@ -424,7 +448,6 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   line-height: 1.5;
 }
 
-// Assistant: no bubble — raw markdown flow
 .message-group.assistant .bubble {
   padding: 0;
   background: transparent;
@@ -433,17 +456,14 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   border-radius: 0;
 }
 
-// User: subtle gray pill
 .message-group.user .bubble {
   padding: 10px 16px;
-  background: $bg-input;
-  color: rgba(var(--dark-primary-text));
+  background: var(--agent-bubble-user);
+  color: var(--agent-text);
   border-radius: $radius-lg;
   border-bottom-right-radius: 4px;
 }
 
-
-// Action bar
 .action-bar {
   display: flex;
   align-items: center;
@@ -462,12 +482,12 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   border-radius: 6px;
   background: transparent;
   cursor: pointer;
-  color: $text-tertiary;
+  color: var(--agent-text-tertiary);
   transition: all 0.15s;
 
   &:hover:not(:disabled) {
-    background: $bg-input;
-    color: rgba(var(--dark-primary-text));
+    background: var(--agent-bg-input);
+    color: var(--agent-text);
 
     .action-tooltip {
       opacity: 1;
@@ -502,9 +522,9 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   line-height: 1;
   padding: 5px 8px;
   border-radius: 6px;
-  background: $bg-input;
-  color: rgba(var(--dark-primary-text));
-  border: 1px solid $border-color;
+  background: var(--agent-tooltip-bg);
+  color: var(--agent-text);
+  border: 1px solid var(--agent-border);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s;
@@ -520,14 +540,14 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   margin-left: 4px;
   border: none;
   background: transparent;
-  color: $text-tertiary;
+  color: var(--agent-text-tertiary);
   font-size: 11px;
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
   cursor: default;
   transition: color 0.15s;
 
   &:hover {
-    color: $text-secondary;
+    color: var(--agent-text-secondary);
 
     .latency-tooltip {
       opacity: 1;
@@ -546,8 +566,8 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   min-width: 200px;
   padding: 8px 12px;
   border-radius: $radius-sm;
-  background: $bg-input;
-  border: 1px solid $border-color;
+  background: var(--agent-tooltip-bg);
+  border: 1px solid var(--agent-border);
   font-size: 12px;
   opacity: 0;
   pointer-events: none;
@@ -555,8 +575,6 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   z-index: 10;
 }
 
-
-// Typing indicator
 .typing-indicator {
   display: flex;
   gap: 4px;
@@ -570,33 +588,19 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
     opacity: 0.4;
     animation: typing 1.4s infinite;
 
-    &:nth-child(2) {
-      animation-delay: 0.2s;
-    }
-
-    &:nth-child(3) {
-      animation-delay: 0.4s;
-    }
+    &:nth-child(2) { animation-delay: 0.2s; }
+    &:nth-child(3) { animation-delay: 0.4s; }
   }
 }
 
 @keyframes typing {
-  0%,
-  60%,
-  100% {
-    opacity: 0.4;
-    transform: scale(1);
-  }
-  30% {
-    opacity: 1;
-    transform: scale(1.2);
-  }
+  0%, 60%, 100% { opacity: 0.4; transform: scale(1); }
+  30% { opacity: 1; transform: scale(1.2); }
 }
 
-// Input Area — clean, no extra borders
 .input-container {
   padding: 16px 24px;
-  background: white;
+  background: var(--agent-bg-surface);
   display: flex;
   justify-content: center;
 }
@@ -606,18 +610,16 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   width: 100%;
   display: flex;
   align-items: flex-end;
-  background: $bg-input;
+  background: var(--agent-bg-input);
   border-radius: $radius-lg;
   padding: 8px;
   border: 1px solid transparent;
-  transition:
-    border-color 0.2s,
-    background 0.2s;
+  transition: border-color 0.2s, background 0.2s;
 
   &:focus-within {
     border-color: $primary;
-    background: white;
-    box-shadow: 0 0 0 3px $primary-light;
+    background: var(--agent-bg-surface);
+    box-shadow: var(--agent-input-focus-shadow);
   }
 }
 
@@ -628,7 +630,7 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   padding: 8px 12px;
   font-family: inherit;
   font-size: 15px;
-  color: rgba(var(--dark-primary-text));
+  color: var(--agent-text);
   resize: none;
   max-height: 120px;
   min-height: 24px;
@@ -636,7 +638,7 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   line-height: 1.5;
 
   &::placeholder {
-    color: $text-tertiary;
+    color: var(--agent-text-tertiary);
   }
 }
 
@@ -645,7 +647,7 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   height: 36px;
   border-radius: $radius-sm;
   border: none;
-  background: $primary;
+  background: var(--agent-send-bg);
   color: white;
   cursor: pointer;
   display: flex;
@@ -656,203 +658,21 @@ $shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05),
   transition: background 0.15s;
 
   &:hover:not(:disabled) {
-    background: $primary-dark;
+    background: var(--agent-send-hover);
   }
 
   &:disabled {
-    background: $text-tertiary;
+    background: var(--agent-send-disabled-bg);
+    color: var(--agent-send-disabled-color);
     cursor: not-allowed;
   }
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-
-// ─── Dark mode ───
-:host-context(.theme-dark) {
-  .agent-sidebar {
-    background: rgba(255, 255, 255, 0.03);
-  }
-
-  .new-chat-btn {
-    color: rgba(var(--light-primary-text));
-    background: rgba(255, 255, 255, 0.08);
-
-    &:hover {
-      background: rgba(255, 255, 255, 0.12);
-    }
-  }
-
-  .conversation-item-wrapper:hover {
-    background: rgba(255, 255, 255, 0.06);
-  }
-
-  .conversation-item {
-    color: rgba(var(--light-primary-text));
-
-    &.active {
-      color: var(--mat-tab-active-label-text-color, rgba(var(--palette-primary-500), 1));
-    }
-  }
-
-  .context-menu-trigger {
-    color: rgba(255, 255, 255, 0.4);
-  }
-
-  .context-menu {
-    background: #2a2a2a;
-    border-color: rgba(255, 255, 255, 0.12);
-  }
-
-  .context-menu-item {
-    color: rgba(var(--light-primary-text));
-
-    &:hover {
-      background: rgba(255, 255, 255, 0.08);
-    }
-
-    &.delete {
-      color: #f44336;
-    }
-  }
-
-  .rename-input {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(var(--light-primary-text));
-    border-color: $primary;
-    box-shadow: 0 0 0 2px rgba($primary, 0.15);
-  }
-
-  .pin-badge {
-    color: rgba(255, 255, 255, 0.4);
-  }
-
-  .no-conversations {
-    color: rgba(255, 255, 255, 0.5);
-  }
-
-  .agent-main {
-    background: rgb(var(--dark-background));
-  }
-
-  .empty-icon {
-    background: linear-gradient(135deg, rgba($primary, 0.15), rgba($primary, 0.05));
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-  }
-
-  .empty-subtitle {
-    color: rgba(255, 255, 255, 0.5);
-  }
-
-  .prompt-card {
-    background: rgba(255, 255, 255, 0.05);
-    box-shadow: none;
-    border-color: rgba(255, 255, 255, 0.08);
-
-    &:hover {
-      border-color: $primary;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    }
-  }
-
-  .prompt-text {
-    color: rgba(var(--light-primary-text));
-  }
-
-  .prompt-sub {
-    color: rgba(255, 255, 255, 0.5);
-  }
-
-  .message-group.user .bubble {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(var(--light-primary-text));
-  }
-
-  .tool-label {
-    color: rgba(255, 255, 255, 0.5);
-
-    code {
-      background: rgba($primary, 0.15);
-      color: $primary;
-    }
-  }
-
-  .action-btn {
-    color: rgba(255, 255, 255, 0.4);
-
-    &:hover:not(:disabled) {
-      background: rgba(255, 255, 255, 0.08);
-      color: rgba(var(--light-primary-text));
-    }
-  }
-
-  .action-tooltip {
-    background: #333;
-    border-color: rgba(255, 255, 255, 0.12);
-    color: rgba(var(--light-primary-text));
-  }
-
-  .latency-badge {
-    color: rgba(255, 255, 255, 0.4);
-
-    &:hover {
-      color: rgba(255, 255, 255, 0.6);
-    }
-  }
-
-  .latency-tooltip {
-    background: #333;
-    border-color: rgba(255, 255, 255, 0.12);
-  }
-
-  .input-container {
-    background: rgb(var(--dark-background));
-  }
-
-  .input-wrapper {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: transparent;
-
-    &:focus-within {
-      border-color: $primary;
-      background: rgba(255, 255, 255, 0.08);
-      box-shadow: 0 0 0 3px rgba($primary, 0.15);
-    }
-  }
-
-  .chat-input {
-    color: rgba(var(--light-primary-text));
-
-    &::placeholder {
-      color: rgba(255, 255, 255, 0.4);
-    }
-  }
-
-  .send-btn {
-    background: rgba(var(--palette-primary-500), 1);
-    color: rgba(var(--dark-primary-text));
-
-    &:hover:not(:disabled) {
-      background: rgba(var(--palette-primary-500), 0.85);
-    }
-
-    &:disabled {
-      background: rgba(255, 255, 255, 0.12);
-      color: rgba(255, 255, 255, 0.3);
-    }
-  }
-}
-
-// Responsive
 @media (max-width: 768px) {
   .agent-sidebar {
     display: none;
