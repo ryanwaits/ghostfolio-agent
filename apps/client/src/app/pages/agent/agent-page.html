@@ -185,14 +185,38 @@
           (input)="onInputChange($event)"
           (keydown)="onInputKeydown($event)"
         ></textarea>
-        <button
-          class="send-btn"
-          [disabled]="!inputValue.trim() || isLoading"
-          (click)="sendMessage()"
-        >
-          <ion-icon name="send-outline" size="small" />
-        </button>
+        <div class="input-actions">
+          <div class="model-selector-container">
+            <button class="model-pill" (click)="modelDropdownOpen = !modelDropdownOpen; $event.stopPropagation()">
+              {{ getModelLabel(selectedModel) }}
+              <ion-icon [name]="modelDropdownOpen ? 'chevron-up-outline' : 'chevron-down-outline'" size="small" />
+            </button>
+            @if (modelDropdownOpen) {
+              <div class="model-dropdown" (click)="$event.stopPropagation()">
+                @for (m of models; track m.id) {
+                  <button class="model-option" [class.selected]="selectedModel === m.id" (click)="selectModel(m.id)">
+                    <div class="model-option-text">
+                      <span class="model-name">{{ m.label }}</span>
+                      <span class="model-tier">{{ m.tier }}</span>
+                    </div>
+                    @if (selectedModel === m.id) {
+                      <ion-icon name="checkmark-outline" size="small" class="model-check" />
+                    }
+                  </button>
+                }
+              </div>
+            }
+          </div>
+          <button
+            class="send-btn"
+            [disabled]="!inputValue.trim() || isLoading"
+            (click)="sendMessage()"
+          >
+            <ion-icon name="send-outline" size="small" />
+          </button>
+        </div>
       </div>
     </div>
   </main>
 </div>
+

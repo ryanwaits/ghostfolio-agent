@@ -6,6 +6,7 @@ import type { Prisma } from '@prisma/client';
 export interface ChatMetric {
   requestId: string;
   userId: string;
+  modelId?: string;
   latencyMs: number;
   totalSteps: number;
   toolsUsed: string[];
@@ -61,6 +62,7 @@ export class AgentMetricsService {
       data: {
         requestId: metric.requestId,
         userId: metric.userId,
+        modelId: metric.modelId ?? null,
         latencyMs: metric.latencyMs,
         totalSteps: metric.totalSteps,
         toolsUsed: metric.toolsUsed,

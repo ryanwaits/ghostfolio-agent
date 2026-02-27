@@ -348,6 +348,7 @@ model AgentChatLog {
   promptTokens       Int               @default(0)
   completionTokens   Int               @default(0)
   totalTokens        Int               @default(0)
+  modelId            String?
   errorOccurred      Boolean           @default(false)
   errorMessage       String?
   verificationScore  Float?

@@ -22,9 +22,11 @@ import { PropertyModule } from '@ghostfolio/api/services/property/property.modul
 import { DataGatheringModule } from '@ghostfolio/api/services/queues/data-gathering/data-gathering.module';
 import { PortfolioSnapshotQueueModule } from '@ghostfolio/api/services/queues/portfolio-snapshot/portfolio-snapshot.module';
 import { SymbolProfileModule } from '@ghostfolio/api/services/symbol-profile/symbol-profile.module';
+
 import { TagModule } from '@ghostfolio/api/services/tag/tag.module';
 
 import { Module } from '@nestjs/common';
+
 
 import { AgentController } from './agent.controller';
 import { AgentFeedbackService } from './agent-feedback.service';

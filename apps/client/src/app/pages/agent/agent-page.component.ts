@@ -27,6 +27,9 @@ import {
   analyticsOutline,
   chatbubbleEllipsesOutline,
   chatbubbleOutline,
+  checkmarkOutline,
+  chevronDownOutline,
+  chevronUpOutline,
   copyOutline,
   createOutline,
   ellipsisHorizontalOutline,
@@ -92,6 +95,15 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
   public renamingId: string | null = null;
   public renameValue = '';
 
+  // Model selector
+  public models = [
+    { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', tier: 'Fast' },
+    { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', tier: 'Balanced' },
+    { id: 'claude-opus-4-6', label: 'Opus 4.6', tier: 'Best' }
+  ];
+  public selectedModel = localStorage.getItem('agent-selected-model') || 'claude-sonnet-4-6';
+  public modelDropdownOpen = false;
+
   public promptCards: PromptCard[] = [
     {
       iconName: 'analytics-outline',
@@ -141,6 +153,9 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
       analyticsOutline,
       chatbubbleEllipsesOutline,
       chatbubbleOutline,
+      checkmarkOutline,
+      chevronDownOutline,
+      chevronUpOutline,
       copyOutline,
       createOutline,
       ellipsisHorizontalOutline,
@@ -171,6 +186,7 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
       this.focusInput();
       this.ensureChartObserver();
     });
+
   }
 
   public ngAfterViewInit() {
@@ -186,8 +202,19 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
   @HostListener('document:click')
   public onDocumentClick() {
+    let changed = false;
+
     if (this.openMenuId) {
       this.openMenuId = null;
+      changed = true;
+    }
+
+    if (this.modelDropdownOpen) {
+      this.modelDropdownOpen = false;
+      changed = true;
+    }
+
+    if (changed) {
       this.changeDetectorRef.markForCheck();
     }
   }
@@ -410,6 +437,18 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // Model selector
+  public selectModel(id: string) {
+    this.selectedModel = id;
+    this.modelDropdownOpen = false;
+    localStorage.setItem('agent-selected-model', id);
+    this.changeDetectorRef.markForCheck();
+  }
+
+  public getModelLabel(id: string): string {
+    return this.models.find((m) => m.id === id)?.label ?? 'Sonnet 4.6';
+  }
+
   private sendMessageDirect(text: string) {
     if (!text || this.isLoading) {
       return;
@@ -489,7 +528,8 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
         },
         body: JSON.stringify({
           messages: conversationMessages,
-          toolHistory: toolHistory.length > 0 ? toolHistory : undefined
+          toolHistory: toolHistory.length > 0 ? toolHistory : undefined,
+          model: this.selectedModel
         })
       });
 

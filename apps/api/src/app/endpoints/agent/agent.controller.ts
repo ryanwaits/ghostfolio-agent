@@ -43,13 +43,15 @@ export class AgentController {
   @HasPermission(permissions.readAiPrompt)
   @UseGuards(AuthGuard('jwt'), HasPermissionGuard)
   public async chat(
-    @Body() body: { messages: UIMessage[]; toolHistory?: string[] },
+    @Body()
+    body: { messages: UIMessage[]; toolHistory?: string[]; model?: string },
     @Res() res: Response
   ) {
     try {
       const { result, requestId } = await this.agentService.chat({
         messages: body.messages,
         toolHistory: body.toolHistory,
+        model: body.model,
         userId: this.request.user.id
       });
 

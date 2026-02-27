@@ -18,7 +18,9 @@ import {
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
+
 import { AgentMetricsService } from './agent-metrics.service';
+import { validateModelId } from './models';
 import { createPrepareStep, loadSkills } from './prepare-step';
 import { createAccountManageTool } from './tools/account-manage.tool';
 import { createActivityManageTool } from './tools/activity-manage.tool';
@@ -101,24 +103,30 @@ export class AgentService {
 
   public async chat({
     messages,
+    model,
     toolHistory,
     userId
   }: {
     messages: ModelMessage[] | UIMessage[];
+    model?: string;
     toolHistory?: string[];
     userId: string;
   }) {
     const requestId = randomUUID();
     const startTime = Date.now();
+    const modelId = validateModelId(model);
 
     this.logger.log(
       JSON.stringify({
         event: 'chat_start',
         requestId,
         userId,
+        modelId,
         messageCount: messages.length
       })
     );
+
+    const anthropic = createAnthropic();
 
     const tools = this.buildTools(userId);
     const prepareStep = createPrepareStep(
@@ -128,7 +136,7 @@ export class AgentService {
     );
 
     const agent = new ToolLoopAgent({
-      model: createAnthropic()('claude-sonnet-4-6'),
+      model: anthropic(modelId),
       instructions: BASE_INSTRUCTIONS,
       tools,
       prepareStep: prepareStep as unknown as PrepareStepFunction<
@@ -213,6 +221,7 @@ export class AgentService {
         this.agentMetricsService.record({
           requestId,
           userId,
+          modelId,
           latencyMs,
           totalSteps: steps.length,
           toolsUsed: uniqueTools,
