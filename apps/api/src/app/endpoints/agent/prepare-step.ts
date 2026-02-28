@@ -4,7 +4,6 @@ import type {
   StepResult,
   ToolSet
 } from 'ai';
-
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -145,7 +144,8 @@ export function createPrepareStep(
     );
 
     // Skill composition: append skill bodies based on step context
-    const systemParts: string[] = [baseInstructions];
+    const today = new Date().toISOString().split('T')[0];
+    const systemParts: string[] = [baseInstructions, `Today is ${today}.`];
 
     // Transaction skill: always loaded (write tools are always visible)
     if (transactionSkill) {
