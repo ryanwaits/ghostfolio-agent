@@ -12,7 +12,7 @@ export function createAccountManageTool({
 }) {
   return tool({
     description:
-      'Manage investment accounts (brokerages, banks, wallets). Use this to create new accounts, update account details, delete empty accounts, transfer cash between accounts, or list all accounts with balances.',
+      'Manage investment accounts (brokerages, banks, wallets). Use this to create new accounts, update account details, delete empty accounts, transfer cash between accounts, or list all accounts with balances. IMPORTANT: Deposits and withdrawals are performed by updating the account balance (action: "update"). Do NOT use activity_manage for deposits or withdrawals — just set the new balance here and it will automatically be tracked in transaction_history.',
     inputSchema: z.object({
       action: z
         .enum(['create', 'update', 'delete', 'transfer', 'list'])
@@ -36,7 +36,7 @@ export function createAccountManageTool({
         .min(0)
         .optional()
         .describe(
-          "Cash balance. For 'create': initial balance (default 0). For 'update': overwrites current. For 'transfer': amount to move."
+          "Cash balance. For 'create': initial balance (default 0). For 'update': sets new absolute balance (e.g. to withdraw $5k from $40k, set balance to 35000). For 'transfer': amount to move."
         ),
       accountId: z
         .string()
@@ -58,7 +58,7 @@ export function createAccountManageTool({
       comment: z
         .string()
         .optional()
-        .describe("Optional note about the account."),
+        .describe('Optional note about the account.'),
       isExcluded: z
         .boolean()
         .optional()

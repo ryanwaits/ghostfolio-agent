@@ -1,3 +1,4 @@
+import { AccountBalanceService } from '@ghostfolio/api/app/account-balance/account-balance.service';
 import { AccountService } from '@ghostfolio/api/app/account/account.service';
 import { WatchlistService } from '@ghostfolio/api/app/endpoints/watchlist/watchlist.service';
 import { OrderService } from '@ghostfolio/api/app/order/order.service';
@@ -17,7 +18,6 @@ import {
 } from 'ai';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-
 
 import { AgentMetricsService } from './agent-metrics.service';
 import { validateModelId } from './models';
@@ -89,6 +89,7 @@ export class AgentService {
   private readonly skills: ReturnType<typeof loadSkills>;
 
   public constructor(
+    private readonly accountBalanceService: AccountBalanceService,
     private readonly accountService: AccountService,
     private readonly agentMetricsService: AgentMetricsService,
     private readonly dataProviderService: DataProviderService,
@@ -139,9 +140,7 @@ export class AgentService {
       model: anthropic(modelId),
       instructions: BASE_INSTRUCTIONS,
       tools,
-      prepareStep: prepareStep as unknown as PrepareStepFunction<
-        typeof tools
-      >,
+      prepareStep: prepareStep as unknown as PrepareStepFunction<typeof tools>,
       stopWhen: stepCountIs(10),
       onStepFinish: ({ toolCalls, usage, finishReason, stepNumber }) => {
         const toolNames = toolCalls.map((tc) => tc.toolName);
@@ -293,6 +292,8 @@ export class AgentService {
         userId
       }),
       transaction_history: createTransactionHistoryTool({
+        accountBalanceService: this.accountBalanceService,
+        accountService: this.accountService,
         orderService: this.orderService,
         userService: this.userService,
         userId
