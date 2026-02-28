@@ -74,28 +74,45 @@ async function main() {
     });
   }
 
+  // Resolve actual symbolProfile IDs (may differ from seed IDs if profiles pre-existed)
+  const profileLookup = new Map<string, string>();
+  for (const sp of symbols) {
+    const found = await prisma.symbolProfile.findUnique({
+      where: { dataSource_symbol: { dataSource: sp.dataSource, symbol: sp.symbol } },
+      select: { id: true }
+    });
+    if (found) {
+      profileLookup.set(sp.id, found.id);
+    }
+  }
+
   // Orders (buy transactions with realistic dates/prices)
   const orders = [
-    { id: '49f6cba4-7dd2-47e1-918e-4d8538e3818f', symbolProfileId: 'd8f0b8c3-212c-48ef-a837-fff75ef98176', type: 'BUY' as const, quantity: 15, unitPrice: 178.50, fee: 0, date: new Date('2024-03-15'), currency: 'USD' },
-    { id: '7090411c-a046-4363-a89e-d61d28417820', symbolProfileId: '5bb696ab-aaf3-4924-a0e4-79c69bfcd81b', type: 'BUY' as const, quantity: 10, unitPrice: 420.00, fee: 0, date: new Date('2024-04-01'), currency: 'USD' },
-    { id: '06cd0784-c5f4-42a0-b799-eb48b61b7afb', symbolProfileId: '7df6544c-c592-459c-af69-aafe65db60c9', type: 'BUY' as const, quantity: 20, unitPrice: 480.00, fee: 0, date: new Date('2024-01-10'), currency: 'USD' },
-    { id: '151b2a27-f82f-4393-85b2-a57660fc2d25', symbolProfileId: 'ba75d50e-34f6-4c9e-bbb7-71b43b7cbfc0', type: 'BUY' as const, quantity: 8, unitPrice: 155.00, fee: 0, date: new Date('2024-06-20'), currency: 'USD' },
-    { id: 'abc07d0a-3be2-4185-9ae4-d2b0fa4a5d48', symbolProfileId: '8b846370-2e16-4594-9785-a94da15d60a1', type: 'BUY' as const, quantity: 0.5, unitPrice: 43000.00, fee: 0, date: new Date('2024-02-01'), currency: 'USD' },
-    { id: 'e3a1f7c2-8d94-4b61-a5e3-9c72d1f08e34', symbolProfileId: 'd8f0b8c3-212c-48ef-a837-fff75ef98176', type: 'BUY' as const, quantity: 5, unitPrice: 195.00, fee: 0, date: new Date('2024-09-15'), currency: 'USD' },
-    { id: 'f7b2c8d1-6e45-4a93-b812-d3e9f0a17c56', symbolProfileId: '7df6544c-c592-459c-af69-aafe65db60c9', type: 'DIVIDEND' as const, quantity: 0, unitPrice: 1.78, fee: 0, date: new Date('2024-12-20'), currency: 'USD' },
-    { id: 'a1c3e5f7-2b4d-4869-9a0c-e6f8d2b4a7c1', symbolProfileId: '5bb696ab-aaf3-4924-a0e4-79c69bfcd81b', type: 'SELL' as const, quantity: 3, unitPrice: 450.00, fee: 0, date: new Date('2025-01-10'), currency: 'USD' },
+    { id: '49f6cba4-7dd2-47e1-918e-4d8538e3818f', seedProfileId: 'd8f0b8c3-212c-48ef-a837-fff75ef98176', type: 'BUY' as const, quantity: 15, unitPrice: 178.50, fee: 0, date: new Date('2024-03-15'), currency: 'USD' },
+    { id: '7090411c-a046-4363-a89e-d61d28417820', seedProfileId: '5bb696ab-aaf3-4924-a0e4-79c69bfcd81b', type: 'BUY' as const, quantity: 10, unitPrice: 420.00, fee: 0, date: new Date('2024-04-01'), currency: 'USD' },
+    { id: '06cd0784-c5f4-42a0-b799-eb48b61b7afb', seedProfileId: '7df6544c-c592-459c-af69-aafe65db60c9', type: 'BUY' as const, quantity: 20, unitPrice: 480.00, fee: 0, date: new Date('2024-01-10'), currency: 'USD' },
+    { id: '151b2a27-f82f-4393-85b2-a57660fc2d25', seedProfileId: 'ba75d50e-34f6-4c9e-bbb7-71b43b7cbfc0', type: 'BUY' as const, quantity: 8, unitPrice: 155.00, fee: 0, date: new Date('2024-06-20'), currency: 'USD' },
+    { id: 'abc07d0a-3be2-4185-9ae4-d2b0fa4a5d48', seedProfileId: '8b846370-2e16-4594-9785-a94da15d60a1', type: 'BUY' as const, quantity: 0.5, unitPrice: 43000.00, fee: 0, date: new Date('2024-02-01'), currency: 'USD' },
+    { id: 'e3a1f7c2-8d94-4b61-a5e3-9c72d1f08e34', seedProfileId: 'd8f0b8c3-212c-48ef-a837-fff75ef98176', type: 'BUY' as const, quantity: 5, unitPrice: 195.00, fee: 0, date: new Date('2024-09-15'), currency: 'USD' },
+    { id: 'f7b2c8d1-6e45-4a93-b812-d3e9f0a17c56', seedProfileId: '7df6544c-c592-459c-af69-aafe65db60c9', type: 'DIVIDEND' as const, quantity: 0, unitPrice: 1.78, fee: 0, date: new Date('2024-12-20'), currency: 'USD' },
+    { id: 'a1c3e5f7-2b4d-4869-9a0c-e6f8d2b4a7c1', seedProfileId: '5bb696ab-aaf3-4924-a0e4-79c69bfcd81b', type: 'SELL' as const, quantity: 3, unitPrice: 450.00, fee: 0, date: new Date('2025-01-10'), currency: 'USD' },
   ];
 
   for (const ord of orders) {
+    const symbolProfileId = profileLookup.get(ord.seedProfileId);
+    if (!symbolProfileId) {
+      console.warn(`⚠️  Skipping order ${ord.id}: no symbolProfile found for seed ID ${ord.seedProfileId}`);
+      continue;
+    }
     await prisma.order.upsert({
       where: { id: ord.id },
-      update: {},
+      update: { symbolProfileId },
       create: {
         id: ord.id,
         userId: DEMO_USER_ID,
         accountId: DEMO_ACCOUNT_ID,
         accountUserId: DEMO_USER_ID,
-        symbolProfileId: ord.symbolProfileId,
+        symbolProfileId,
         type: ord.type,
         quantity: ord.quantity,
         unitPrice: ord.unitPrice,
