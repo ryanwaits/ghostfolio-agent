@@ -46,12 +46,19 @@ import {
 import { Subject, takeUntil } from 'rxjs';
 
 
+interface StepSegment {
+  text: string;
+  isIntermediate: boolean;
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   html?: SafeHtml;
   isStreaming?: boolean;
   activeTools?: string[];
+  stepSegments?: StepSegment[];
+  toolsExpanded?: boolean;
   requestId?: string;
   feedbackRating?: number;
   latencyMs?: number;
@@ -370,6 +377,25 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  public getThinkingSegments(message: ChatMessage): StepSegment[] {
+    const content = message.content || '';
+    return (message.stepSegments || []).filter((s) => {
+      if (!s.isIntermediate || !s.text.trim()) return false;
+      // Strip markdown heading markers and check for duplication in final output
+      const cleaned = s.text.trim().replace(/^#+\s*/gm, '').trim();
+      return cleaned.length > 0 && !content.includes(cleaned);
+    });
+  }
+
+  public hasThinking(message: ChatMessage): boolean {
+    return this.getThinkingSegments(message).length > 0;
+  }
+
+  public toggleToolsExpanded(message: ChatMessage) {
+    message.toolsExpanded = !message.toolsExpanded;
+    this.changeDetectorRef.markForCheck();
+  }
+
   public async copyMessage(message: ChatMessage) {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -479,7 +505,8 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
     const assistantMessage: ChatMessage = {
       role: 'assistant',
       content: '',
-      isStreaming: true
+      isStreaming: true,
+      stepSegments: []
     };
     this.activeConversation.messages.push(assistantMessage);
     this.changeDetectorRef.markForCheck();
@@ -487,8 +514,14 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.ensureChartObserver();
 
     let fullText = '';
+    let currentStepText = '';
+    let stepHasTools = false;
+    const stepSegments: StepSegment[] = [];
 
     // Start render interval — batches token deltas at ~12fps
+    // Intermediate step text (before tool calls) is never rendered — only
+    // final step text streams as live markdown.
+    let inIntermediateStep = false;
     this.renderDirty = false;
     this.renderInterval = setInterval(() => {
       if (!this.renderDirty) {
@@ -496,8 +529,10 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
       }
       this.renderDirty = false;
 
-      if (this.marked && this.remend) {
-        const streamSafe = this.stripTrailingFencedBlock(fullText);
+      if (!inIntermediateStep && this.marked && this.remend) {
+        const renderText = stepSegments.length > 0 ? currentStepText : fullText;
+        const streamSafe = this.stripTrailingFencedBlock(renderText);
+        assistantMessage.content = renderText;
         assistantMessage.html = this.toSafeHtml(
           this.marked.parse(this.normalizeMarkdown(this.remend(streamSafe))) as string
         );
@@ -571,19 +606,47 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
               }
               if (!assistantMessage.activeTools.includes(evt.toolName)) {
                 assistantMessage.activeTools.push(evt.toolName);
-                this.changeDetectorRef.markForCheck();
               }
+              // First tool in this step: flush accumulated text as intermediate
+              if (!stepHasTools && currentStepText.trim()) {
+                stepSegments.push({ text: currentStepText, isIntermediate: true });
+                currentStepText = '';
+                stepHasTools = true;
+              }
+              inIntermediateStep = true;
+              // Clear any rendered intermediate text from the bubble
+              assistantMessage.content = '';
+              assistantMessage.html = undefined;
+              this.renderDirty = true;
             }
 
             if (evt.type === 'text-delta') {
               fullText += evt.delta;
-              assistantMessage.content = fullText;
-              this.renderDirty = true;
+              currentStepText += evt.delta;
+              if (!inIntermediateStep) {
+                this.renderDirty = true;
+              }
             } else if (
               (evt.type === 'finish' || evt.type === 'message-metadata') &&
               evt.messageMetadata?.requestId
             ) {
               assistantMessage.requestId = evt.messageMetadata.requestId;
+            } else if (
+              evt.type === 'message-metadata' &&
+              evt.messageMetadata?.stepFinish
+            ) {
+              // Only push if toolName handler didn't already flush this step
+              if (!stepHasTools && currentStepText.trim()) {
+                const isIntermediate = evt.messageMetadata.finishReason === 'tool-calls';
+                stepSegments.push({ text: currentStepText, isIntermediate });
+              }
+              currentStepText = '';
+              stepHasTools = false;
+              // After a tool-calls step, next text is still potentially intermediate
+              // until we see it's the final step. But we optimistically render it
+              // since most final steps don't call more tools.
+              inIntermediateStep = false;
+              this.renderDirty = true;
             }
           } catch {
             // Skip malformed JSON
@@ -601,12 +664,22 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
               const evt = JSON.parse(data);
               if (evt.type === 'text-delta') {
                 fullText += evt.delta;
-                assistantMessage.content = fullText;
+                currentStepText += evt.delta;
               } else if (
                 (evt.type === 'finish' || evt.type === 'message-metadata') &&
                 evt.messageMetadata?.requestId
               ) {
                 assistantMessage.requestId = evt.messageMetadata.requestId;
+              } else if (
+                evt.type === 'message-metadata' &&
+                evt.messageMetadata?.stepFinish
+              ) {
+                if (!stepHasTools && currentStepText.trim()) {
+                  const isIntermediate = evt.messageMetadata.finishReason === 'tool-calls';
+                  stepSegments.push({ text: currentStepText, isIntermediate });
+                }
+                currentStepText = '';
+                stepHasTools = false;
               }
             } catch {
               // Skip malformed JSON
@@ -615,11 +688,22 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       }
 
-      // Final render — no remend needed, text is complete
+      // Flush any remaining step text as final
+      if (currentStepText.trim()) {
+        stepSegments.push({ text: currentStepText, isIntermediate: false });
+      }
+      assistantMessage.stepSegments = stepSegments;
+
+      // Final render — only non-intermediate segments as main markdown
       this.clearRenderInterval();
-      if (fullText && this.marked) {
+      const finalText = stepSegments
+        .filter((s) => !s.isIntermediate)
+        .map((s) => s.text)
+        .join('');
+      assistantMessage.content = finalText || fullText;
+      if (assistantMessage.content && this.marked) {
         assistantMessage.html = this.toSafeHtml(
-          this.marked.parse(this.normalizeMarkdown(fullText)) as string
+          this.marked.parse(this.normalizeMarkdown(assistantMessage.content)) as string
         );
       }
 
@@ -660,6 +744,7 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
             role: m.role,
             content: m.content,
             activeTools: m.activeTools,
+            stepSegments: m.stepSegments,
             requestId: m.requestId,
             feedbackRating: m.feedbackRating,
             latencyMs: m.latencyMs
@@ -695,7 +780,8 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
             html:
               m.role === 'assistant' && m.content && this.marked
                 ? this.toSafeHtml(this.marked.parse(this.normalizeMarkdown(m.content)) as string)
-                : undefined
+                : undefined,
+            stepSegments: m.stepSegments || undefined
           }))
         })
       );

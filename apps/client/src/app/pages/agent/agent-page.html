@@ -104,6 +104,19 @@
                       <span class="tool-label"><code>{{ tool }}</code></span>
                     }
                   </div>
+                  @if (!message.isStreaming && hasThinking(message)) {
+                    <button class="thinking-toggle" (click)="toggleToolsExpanded(message)">
+                      <ion-icon [name]="message.toolsExpanded ? 'chevron-up-outline' : 'chevron-down-outline'" size="small" />
+                      <span>{{ message.toolsExpanded ? 'Hide thinking' : 'Show thinking' }}</span>
+                    </button>
+                    @if (message.toolsExpanded) {
+                      <div class="step-narration-list">
+                        @for (segment of getThinkingSegments(message); track $index) {
+                          <span class="step-narration">{{ segment.text.trim() }}</span>
+                        }
+                      </div>
+                    }
+                  }
                 }
                 <div class="bubble" [class.streaming]="message.isStreaming">
                   @if (message.role === 'assistant' && message.html) {

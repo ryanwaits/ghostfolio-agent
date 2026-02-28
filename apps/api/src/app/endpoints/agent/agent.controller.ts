@@ -60,6 +60,9 @@ export class AgentController {
           if (part.type === 'finish') {
             return { requestId };
           }
+          if (part.type === 'finish-step') {
+            return { stepFinish: true, finishReason: part.finishReason };
+          }
           return undefined;
         }
       });
