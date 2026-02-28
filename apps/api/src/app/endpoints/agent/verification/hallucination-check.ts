@@ -197,7 +197,7 @@ function extractHoldingSymbols(toolResults: ToolResult[]): Set<string> {
       const str = JSON.stringify(tr.result);
       const matches = str.match(/"symbol"\s*:\s*"([^"]+)"/g) ?? [];
       for (const m of matches) {
-        const sym = m.match(/"symbol"\s*:\s*"([^"]+)"/)?.[1];
+        const sym = /"symbol"\s*:\s*"([^"]+)"/.exec(m)?.[1];
         if (sym) symbols.add(sym);
       }
     }

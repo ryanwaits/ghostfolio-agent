@@ -36,7 +36,7 @@ export function createPortfolioPerformanceTool({
 
         // Downsample chart to ~20 points for LLM context efficiency
         const chart = result.chart ?? [];
-        let sampled: { date: string; netWorth: number }[] = [];
+        const sampled: { date: string; netWorth: number }[] = [];
 
         if (chart.length > 0) {
           const step = Math.max(1, Math.floor(chart.length / 20));
