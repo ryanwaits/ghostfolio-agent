@@ -262,6 +262,7 @@ export class AgentService {
         userId
       }),
       activity_manage: createActivityManageTool({
+        accountService: this.accountService,
         dataProviderService: this.dataProviderService,
         orderService: this.orderService,
         userService: this.userService,

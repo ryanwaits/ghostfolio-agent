@@ -138,7 +138,7 @@ describe('createPrepareStep', () => {
   const skills = loadSkills(__dirname + '/skills');
   const prepareStep = createPrepareStep(skills, BASE);
 
-  it('excludes activity_manage when no context tools called', () => {
+  it('includes all tools from step 0 (activity_manage auto-resolves accounts)', () => {
     const result = callPrepareStep(prepareStep, {
       steps: [],
       stepNumber: 0,
@@ -147,7 +147,7 @@ describe('createPrepareStep', () => {
       experimental_context: undefined
     });
 
-    expect(result.activeTools).not.toContain('activity_manage');
+    expect(result.activeTools).toContain('activity_manage');
     expect(result.activeTools).toContain('portfolio_analysis');
     expect(result.activeTools).toContain('portfolio_performance');
     expect(result.activeTools).toContain('holdings_lookup');
@@ -157,61 +157,6 @@ describe('createPrepareStep', () => {
     expect(result.activeTools).toContain('account_manage');
     expect(result.activeTools).toContain('tag_manage');
     expect(result.activeTools).toContain('watchlist_manage');
-  });
-
-  it('includes activity_manage after account_manage called', () => {
-    const result = callPrepareStep(prepareStep, {
-      steps: [makeStep(['account_manage'])],
-      stepNumber: 1,
-      model: {} as any,
-      messages: [],
-      experimental_context: undefined
-    });
-
-    expect(result.activeTools).toContain('activity_manage');
-    expect(result.activeTools).toContain('account_manage');
-  });
-
-  it('includes activity_manage after transaction_history called', () => {
-    const result = callPrepareStep(prepareStep, {
-      steps: [makeStep(['transaction_history'])],
-      stepNumber: 1,
-      model: {} as any,
-      messages: [],
-      experimental_context: undefined
-    });
-
-    expect(result.activeTools).toContain('activity_manage');
-    expect(result.activeTools).toContain('transaction_history');
-  });
-
-  it('excludes activity_manage when only read tools called', () => {
-    const result = callPrepareStep(prepareStep, {
-      steps: [makeStep(['portfolio_analysis', 'holdings_lookup'])],
-      stepNumber: 1,
-      model: {} as any,
-      messages: [],
-      experimental_context: undefined
-    });
-
-    expect(result.activeTools).not.toContain('activity_manage');
-  });
-
-  it('includes activity_manage when account_manage was called in prior turn', () => {
-    const messages = [
-      makeMessage('user'),
-      makeMessage('assistant', ['account_manage']),
-      makeMessage('user'),
-    ];
-    const result = callPrepareStep(prepareStep, {
-      steps: [],
-      stepNumber: 0,
-      model: {} as any,
-      messages: messages as ModelMessage[],
-      experimental_context: undefined
-    });
-
-    expect(result.activeTools).toContain('activity_manage');
   });
 
   it('includes transaction skill in system prompt on step 0', () => {
@@ -270,7 +215,7 @@ describe('createPrepareStep', () => {
     expect(system).not.toContain('MARKET DATA LOOKUPS');
   });
 
-  it('includes activity_manage when priorToolHistory contains account_manage', () => {
+  it('includes all tools regardless of priorToolHistory', () => {
     const withHistory = createPrepareStep(skills, BASE, ['account_manage']);
     const result = callPrepareStep(withHistory, {
       steps: [],
@@ -281,6 +226,7 @@ describe('createPrepareStep', () => {
     });
 
     expect(result.activeTools).toContain('activity_manage');
+    expect(result.activeTools).toHaveLength(10);
   });
 
   it('includes market-data skill when priorToolHistory contains market_data', () => {

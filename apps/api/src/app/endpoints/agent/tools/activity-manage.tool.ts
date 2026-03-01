@@ -1,3 +1,4 @@
+import { AccountService } from '@ghostfolio/api/app/account/account.service';
 import { OrderService } from '@ghostfolio/api/app/order/order.service';
 import { UserService } from '@ghostfolio/api/app/user/user.service';
 import { DataProviderService } from '@ghostfolio/api/services/data-provider/data-provider.service';
@@ -7,12 +8,48 @@ import { tool } from 'ai';
 import { parseISO } from 'date-fns';
 import { z } from 'zod';
 
+const CRYPTO_KEYWORDS = ['crypto', 'coin', 'wallet', 'defi', 'token'];
+const STOCK_KEYWORDS = ['stock', 'brokerage', 'equity', 'equities'];
+const ETF_KEYWORDS = ['etf', 'index', 'fund'];
+
+function resolveAccount(
+  accounts: { id: string; name: string; activitiesCount?: number }[],
+  dataSource: string
+): string | undefined {
+  if (accounts.length === 0) return undefined;
+  if (accounts.length === 1) return accounts[0].id;
+
+  const keywords =
+    dataSource === 'COINGECKO'
+      ? CRYPTO_KEYWORDS
+      : dataSource === 'YAHOO'
+        ? [...STOCK_KEYWORDS, ...ETF_KEYWORDS]
+        : [];
+
+  if (keywords.length > 0) {
+    const match = accounts.find((a) =>
+      keywords.some((kw) => a.name.toLowerCase().includes(kw))
+    );
+
+    if (match) return match.id;
+  }
+
+  // Fallback: account with most activities
+  const sorted = [...accounts].sort(
+    (a, b) => (b.activitiesCount ?? 0) - (a.activitiesCount ?? 0)
+  );
+
+  return sorted[0].id;
+}
+
 export function createActivityManageTool({
+  accountService,
   dataProviderService,
   orderService,
   userService,
   userId
 }: {
+  accountService: AccountService;
   dataProviderService: DataProviderService;
   orderService: OrderService;
   userService: UserService;
@@ -76,7 +113,7 @@ export function createActivityManageTool({
         .uuid()
         .optional()
         .describe(
-          'Account ID to associate with. Use account_manage(list) to find IDs.'
+          'Account ID. Optional — if omitted, the best-matching account is auto-selected based on asset type.'
         ),
       dataSource: z
         .enum(['YAHOO', 'COINGECKO', 'MANUAL'])
@@ -103,6 +140,21 @@ export function createActivityManageTool({
           case 'create': {
             const user = await userService.user({ id: userId });
 
+            // Auto-resolve account if not provided
+            let accountId = input.accountId;
+
+            if (!accountId) {
+              const accounts = await accountService.getAccounts(userId);
+              accountId = resolveAccount(
+                accounts.map((a: any) => ({
+                  id: a.id,
+                  name: a.name,
+                  activitiesCount: a.activitiesCount
+                })),
+                input.dataSource
+              );
+            }
+
             // Validate activity
             await dataProviderService.validateActivities({
               activitiesDto: [
@@ -118,7 +170,7 @@ export function createActivityManageTool({
             });
 
             const order = await orderService.createOrder({
-              accountId: input.accountId,
+              accountId,
               comment: input.comment,
               currency: input.currency,
               date: parseISO(input.date),
@@ -153,7 +205,8 @@ export function createActivityManageTool({
               quantity: input.quantity,
               unitPrice: input.unitPrice,
               fee: input.fee,
-              currency: input.currency
+              currency: input.currency,
+              accountId
             };
           }
 

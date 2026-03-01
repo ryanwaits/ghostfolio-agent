@@ -134,14 +134,9 @@ export function createPrepareStep(
       ...getToolCallHistory(steps)
     ];
 
-    // Tool gating: activity_manage requires context from account_manage
-    // (for create — need accountId) or transaction_history (for update/delete — need orderId)
-    const hasActivityContext =
-      hasBeenCalled(history, 'account_manage') ||
-      hasBeenCalled(history, 'transaction_history');
-    const activeTools: ToolName[] = ALL_TOOLS.filter(
-      (tool) => tool !== 'activity_manage' || hasActivityContext
-    );
+    // All tools available from step 1. activity_manage auto-resolves accountId
+    // for creates; update/delete require orderId per the tool schema.
+    const activeTools: ToolName[] = [...ALL_TOOLS];
 
     // Skill composition: append skill bodies based on step context
     const today = new Date().toISOString().split('T')[0];
