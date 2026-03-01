@@ -17,7 +17,7 @@
 | Runtime | NestJS (TypeScript) | Native to Ghostfolio codebase |
 | Agent framework | Vercel AI SDK v6 (`ToolLoopAgent`) | Native TS, streaming SSE, built-in tool dispatch |
 | LLM | Claude Sonnet 4.6 (default) | Strong function calling, structured output, 200K context |
-| Model options | Haiku 4.5 ($0.005/chat), Opus 4.6 ($0.077/chat) | User-selectable per session |
+| Model options | Haiku 4.5 ($0.005/chat), Sonnet 4.6 ($0.015/chat), Opus 4.6 ($0.077/chat) | User-selectable per session |
 | Schemas | Zod v4 | Required by AI SDK v6 `inputSchema` |
 | Database | Prisma + Postgres | Shared with Ghostfolio, plus agent-specific tables |
 
