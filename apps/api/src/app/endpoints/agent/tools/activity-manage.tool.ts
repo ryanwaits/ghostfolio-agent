@@ -8,6 +8,26 @@ import { tool } from 'ai';
 import { parseISO } from 'date-fns';
 import { z } from 'zod';
 
+/**
+ * Auto-resolve a CoinGecko slug from a raw ticker symbol.
+ * CoinGecko slugs are always lowercase (e.g. "bitcoin", "stacks").
+ * If the symbol is already lowercase, assume it's a valid slug.
+ */
+async function resolveCoinGeckoSlug(
+  dataProviderService: DataProviderService,
+  user: any,
+  symbol: string
+): Promise<string> {
+  if (symbol === symbol.toLowerCase()) {
+    return symbol;
+  }
+
+  const { items } = await dataProviderService.search({ query: symbol, user });
+  const match = items.find((item) => item.dataSource === 'COINGECKO');
+
+  return match?.symbol ?? symbol.toLowerCase();
+}
+
 const CRYPTO_KEYWORDS = ['crypto', 'coin', 'wallet', 'defi', 'token'];
 const STOCK_KEYWORDS = ['stock', 'brokerage', 'equity', 'equities'];
 const ETF_KEYWORDS = ['etf', 'index', 'fund'];
@@ -74,7 +94,7 @@ export function createActivityManageTool({
         .string()
         .optional()
         .describe(
-          "Asset ticker symbol. Required for 'create'. Stocks/ETFs: uppercase (AAPL). Crypto: CoinGecko slug (bitcoin). FEE/INTEREST: descriptive name."
+          "Asset ticker symbol. Required for 'create'. Stocks/ETFs: uppercase (AAPL). Crypto: ticker or CoinGecko slug — raw tickers (STX) are auto-resolved to slugs (stacks). FEE/INTEREST: descriptive name."
         ),
       date: z
         .string()
@@ -140,6 +160,16 @@ export function createActivityManageTool({
           case 'create': {
             const user = await userService.user({ id: userId });
 
+            // Auto-resolve CoinGecko slug from raw ticker (e.g. "STX" → "stacks")
+            const symbol =
+              input.dataSource === 'COINGECKO' && input.symbol
+                ? await resolveCoinGeckoSlug(
+                    dataProviderService,
+                    user,
+                    input.symbol
+                  )
+                : input.symbol;
+
             // Auto-resolve account if not provided
             let accountId = input.accountId;
 
@@ -161,7 +191,7 @@ export function createActivityManageTool({
                 {
                   currency: input.currency,
                   dataSource: input.dataSource as DataSource,
-                  symbol: input.symbol,
+                  symbol,
                   type: input.type as ActivityType
                 }
               ],
@@ -181,12 +211,12 @@ export function createActivityManageTool({
                   create: {
                     currency: input.currency,
                     dataSource: input.dataSource as DataSource,
-                    symbol: input.symbol
+                    symbol
                   },
                   where: {
                     dataSource_symbol: {
                       dataSource: input.dataSource as DataSource,
-                      symbol: input.symbol
+                      symbol
                     }
                   }
                 }
@@ -200,7 +230,7 @@ export function createActivityManageTool({
             return {
               id: order.id,
               type: input.type,
-              symbol: input.symbol,
+              symbol,
               date: input.date,
               quantity: input.quantity,
               unitPrice: input.unitPrice,
