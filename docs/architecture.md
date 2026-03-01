@@ -34,7 +34,7 @@ ToolLoopAgent.stream()
     │
     ├─► prepareStep()
     │     ├─ Injects current date into system prompt
-    │     ├─ Gates write tools (activity_manage hidden until account context established)
+    │     ├─ All 10 tools available from step 1 (activity_manage auto-resolves accountId)
     │     └─ Loads contextual SKILL.md files based on tool history
     │
     ├─► LLM reasoning → tool selection
@@ -69,7 +69,7 @@ ToolLoopAgent.stream()
 | `watchlist_manage` | Write | Add/remove/list watchlist items |
 | `tag_manage` | Write | CRUD tags for transaction organization |
 
-**Tool gating**: `activity_manage` is hidden from the LLM until `account_manage` or `transaction_history` has been called in the current session, ensuring the agent has account context before attempting writes.
+**Auto-resolution**: `activity_manage` auto-resolves `accountId` when omitted on creates — matches accounts by asset type keywords (crypto → "crypto"/"wallet" accounts, stocks → "stock"/"brokerage" accounts) with fallback to highest-activity account. No tool gating; all 10 tools available from step 1.
 
 **Skill injection**: Contextual SKILL.md documents (transaction workflow, market data patterns) are injected into the system prompt based on which tools have been used, providing the LLM with domain-specific guidance without bloating every request.
 
