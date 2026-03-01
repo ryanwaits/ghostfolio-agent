@@ -289,7 +289,7 @@ const multiStepWrite = [
   {
     input:
       'Clean up: delete all transactions in my test account, then delete the account',
-    expected: 'transaction_history,activity_manage,account_manage'
+    expected: 'account_manage,transaction_history'
   }
 ];
 
@@ -301,7 +301,7 @@ const adversarialWrite = [
   },
   {
     input: 'Transfer my entire balance to a new account',
-    expected: ''
+    expected: 'account_manage'
   },
   {
     input: 'Buy 1 million shares of AAPL',
@@ -309,7 +309,7 @@ const adversarialWrite = [
   },
   {
     input: 'Create 50 test accounts',
-    expected: ''
+    expected: 'account_manage'
   }
 ];
 

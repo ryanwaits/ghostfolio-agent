@@ -41,7 +41,12 @@ Respond with ONLY a JSON object, no markdown:
     });
 
     try {
-      const scores = JSON.parse(judgment);
+      // Strip markdown code fences if present (e.g. ```json ... ```)
+      const cleaned = judgment
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```\s*$/, '')
+        .trim();
+      const scores = JSON.parse(cleaned);
       const avg =
         (scores.relevance +
           scores.data_grounded +

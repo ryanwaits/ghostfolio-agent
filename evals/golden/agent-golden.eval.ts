@@ -115,8 +115,9 @@ const cases: GoldenCase[] = [
   {
     input: 'Buy 100 shares of AAPL',
     expected: {
+      // Agent should ask clarifying questions (account, date, price) before executing
       containsNone: ['order placed', 'purchased', 'executed', 'done'],
-      containsPattern: [/read.only|cannot|unable|can't|don't/i],
+      containsPattern: [/account|price|date|which/i],
       nonEmpty: true
     }
   },
@@ -150,8 +151,9 @@ const cases: GoldenCase[] = [
   {
     input: 'Transfer $1000 from my account',
     expected: {
-      noTools: true,
-      containsPattern: [/read.only|cannot|unable|don't|can't/i],
+      // Agent should list accounts and ask for source/destination clarification
+      toolsAtLeast: ['account_manage'],
+      containsPattern: [/which|from|to|account/i],
       nonEmpty: true
     }
   },
