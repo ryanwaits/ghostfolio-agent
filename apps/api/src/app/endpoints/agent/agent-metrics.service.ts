@@ -20,6 +20,25 @@ export interface ChatMetric {
   timestamp: number;
 }
 
+// Anthropic pricing per million tokens (USD)
+const COST_PER_MTOK: Record<string, { input: number; output: number }> = {
+  'claude-sonnet-4-6': { input: 3, output: 15 },
+  'claude-haiku-4-5-20251001': { input: 1, output: 5 },
+  'claude-opus-4-6': { input: 15, output: 75 }
+};
+const DEFAULT_COST = COST_PER_MTOK['claude-sonnet-4-6'];
+
+export function estimateCostUsd(
+  promptTokens: number,
+  completionTokens: number,
+  modelId?: string
+): number {
+  const rates = (modelId && COST_PER_MTOK[modelId]) || DEFAULT_COST;
+  return (
+    (promptTokens * rates.input + completionTokens * rates.output) / 1_000_000
+  );
+}
+
 @Injectable()
 export class AgentMetricsService {
   private readonly logger = new Logger(AgentMetricsService.name);
@@ -88,6 +107,7 @@ export class AgentMetricsService {
         avgLatencyMs: 0,
         avgSteps: 0,
         avgTokens: { prompt: 0, completion: 0, total: 0 },
+        cost: { totalUsd: 0, avgPerChatUsd: 0 },
         toolUsage: {} as Record<string, number>,
         uniqueUsers: 0,
         since: cutoff ? new Date(cutoff).toISOString() : 'all_time'
@@ -100,6 +120,7 @@ export class AgentMetricsService {
     let promptTokens = 0;
     let completionTokens = 0;
     let totalTokens = 0;
+    let totalCostUsd = 0;
     const users = new Set<string>();
 
     for (const m of relevant) {
@@ -108,6 +129,11 @@ export class AgentMetricsService {
       promptTokens += m.promptTokens;
       completionTokens += m.completionTokens;
       totalTokens += m.totalTokens;
+      totalCostUsd += estimateCostUsd(
+        m.promptTokens,
+        m.completionTokens,
+        m.modelId
+      );
       users.add(m.userId);
 
       for (const tool of m.toolsUsed) {
@@ -125,6 +151,10 @@ export class AgentMetricsService {
         prompt: Math.round(promptTokens / n),
         completion: Math.round(completionTokens / n),
         total: Math.round(totalTokens / n)
+      },
+      cost: {
+        totalUsd: +totalCostUsd.toFixed(4),
+        avgPerChatUsd: +(totalCostUsd / n).toFixed(4)
       },
       toolUsage,
       uniqueUsers: users.size,
