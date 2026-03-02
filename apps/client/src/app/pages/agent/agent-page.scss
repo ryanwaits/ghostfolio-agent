@@ -378,20 +378,6 @@ $radius-sm: 8px;
   }
 }
 
-.avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 9999px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: $primary;
-  color: white;
-  font-size: 14px;
-  margin-top: 2px;
-}
-
 .bubble-wrapper {
   min-width: 0;
 }
@@ -470,6 +456,11 @@ $radius-sm: 8px;
 
 .approval-summary {
   margin-bottom: 14px;
+
+  & + & {
+    padding-top: 14px;
+    border-top: 1px solid var(--agent-border);
+  }
 }
 
 .approval-tool {

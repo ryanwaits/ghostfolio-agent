@@ -91,7 +91,7 @@
       <div class="chat-canvas" #messagesContainer>
         <div class="chat-stream">
           @for (message of activeConversation.messages; track $index) {
-            @if (message.role === 'user' || message.content || message.html || message.activeTools?.length || message.pendingApproval) {
+            @if (message.role === 'user' || message.content || message.html || message.activeTools?.length || message.pendingApprovals?.length) {
             <div
               class="message-group"
               [class.user]="message.role === 'user'"
@@ -113,16 +113,18 @@
                     {{ message.content }}
                   }
                 </div>
-                @if (message.pendingApproval) {
+                @if (message.pendingApprovals?.length) {
                   <div class="approval-card">
-                    <div class="approval-header">Confirm action</div>
-                    <div class="approval-summary">
-                      <code class="approval-tool">{{ formatToolName(message.pendingApproval.toolName) }}</code>
-                      <pre class="approval-detail">{{ formatApprovalInput(message.pendingApproval) }}</pre>
-                    </div>
+                    <div class="approval-header">Confirm {{ message.pendingApprovals.length === 1 ? 'action' : message.pendingApprovals.length + ' actions' }}</div>
+                    @for (inv of message.pendingApprovals; track inv.toolCallId) {
+                      <div class="approval-summary">
+                        <code class="approval-tool">{{ formatToolName(inv.toolName) }}</code>
+                        <pre class="approval-detail">{{ formatApprovalInput(inv) }}</pre>
+                      </div>
+                    }
                     <div class="approval-actions">
-                      <button class="approve-btn" (click)="handleApproval(message, true)">Approve</button>
-                      <button class="deny-btn" (click)="handleApproval(message, false)">Deny</button>
+                      <button class="approve-btn" (click)="handleApproval(message, true)">{{ message.pendingApprovals.length > 1 ? 'Approve all' : 'Approve' }}</button>
+                      <button class="deny-btn" (click)="handleApproval(message, false)">{{ message.pendingApprovals.length > 1 ? 'Deny all' : 'Deny' }}</button>
                     </div>
                   </div>
                 }

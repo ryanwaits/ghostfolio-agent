@@ -86,7 +86,7 @@ interface ChatMessage {
   feedbackRating?: number;
   latencyMs?: number;
   verificationData?: any;
-  pendingApproval?: ToolInvocation;
+  pendingApprovals?: ToolInvocation[];
 }
 
 interface Conversation {
@@ -509,50 +509,47 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   public async handleApproval(message: ChatMessage, approved: boolean) {
-    const inv = message.pendingApproval;
+    const pending = message.pendingApprovals;
 
-    if (!inv) return;
+    if (!pending?.length) return;
 
-    message.pendingApproval = undefined;
+    message.pendingApprovals = undefined;
 
-    // Update tool invocation state
-    if (approved) {
-      inv.state = 'approval-responded';
-      inv.approval = { ...inv.approval, approved: true };
-    } else {
-      inv.state = 'output-denied';
-      inv.approval = { ...inv.approval, approved: false };
-    }
-
-    // Update corresponding part in message.parts
-    const toolPart = message.parts.find(
-      (p): p is Extract<ChatMessagePart, { type: 'dynamic-tool' }> =>
-        p.type === 'dynamic-tool' && p.toolCallId === inv.toolCallId
-    );
-    if (toolPart) {
-      toolPart.state = inv.state;
-      toolPart.approval = { id: inv.approval.id, approved: inv.approval.approved };
-      // approval-responded/output-denied must NOT have output
-      delete toolPart.output;
-    }
-
-    if (approved) {
-      // Track action signature for prerequisite skip
-      const input = inv.input as Record<string, any>;
-      const sig = `${inv.toolName}:${input?.action ?? ''}:${input?.symbol ?? input?.name ?? input?.accountId ?? ''}`;
-      if (!this.approvedActions.includes(sig)) {
-        this.approvedActions.push(sig);
+    for (const inv of pending) {
+      // Update tool invocation state
+      if (approved) {
+        inv.state = 'approval-responded';
+        inv.approval = { ...inv.approval, approved: true };
+      } else {
+        inv.state = 'output-denied';
+        inv.approval = { ...inv.approval, approved: false };
       }
 
-      this.persistConversations();
-      this.changeDetectorRef.markForCheck();
+      // Update corresponding part in message.parts
+      const toolPart = message.parts.find(
+        (p): p is Extract<ChatMessagePart, { type: 'dynamic-tool' }> =>
+          p.type === 'dynamic-tool' && p.toolCallId === inv.toolCallId
+      );
+      if (toolPart) {
+        toolPart.state = inv.state;
+        toolPart.approval = { id: inv.approval.id, approved: inv.approval.approved };
+        delete toolPart.output;
+      }
 
-      // Resume: send UIMessages (with approval-responded parts) to server
-      // and stream the response into the SAME assistant message
+      if (approved) {
+        const input = inv.input as Record<string, any>;
+        const sig = `${inv.toolName}:${input?.action ?? ''}:${input?.symbol ?? input?.name ?? input?.accountId ?? ''}`;
+        if (!this.approvedActions.includes(sig)) {
+          this.approvedActions.push(sig);
+        }
+      }
+    }
+
+    this.persistConversations();
+    this.changeDetectorRef.markForCheck();
+
+    if (approved) {
       this.resumeAfterApproval(message);
-    } else {
-      this.persistConversations();
-      this.changeDetectorRef.markForCheck();
     }
   }
 
@@ -678,7 +675,8 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
               if (inv) {
                 inv.state = 'approval-requested';
                 inv.approval = { id: evt.approvalId };
-                assistantMessage.pendingApproval = inv;
+                if (!assistantMessage.pendingApprovals) assistantMessage.pendingApprovals = [];
+                assistantMessage.pendingApprovals.push(inv);
                 this.renderDirty = true;
               }
             } else if (evt.type === 'tool-output-available') {
@@ -906,7 +904,8 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
               if (inv) {
                 inv.state = 'approval-requested';
                 inv.approval = { id: evt.approvalId };
-                assistantMessage.pendingApproval = inv;
+                if (!assistantMessage.pendingApprovals) assistantMessage.pendingApprovals = [];
+                assistantMessage.pendingApprovals.push(inv);
                 this.renderDirty = true;
               }
             } else if (evt.type === 'tool-output-available') {
@@ -992,14 +991,36 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
   private buildUIMessages() {
     return this.activeConversation.messages
       .filter((m) => m.parts?.length > 0 || m.content)
-      .map((m) => ({
-        id: m.id,
-        role: m.role,
-        parts:
-          m.parts?.length > 0
-            ? m.parts
-            : [{ type: 'text' as const, text: m.content }]
-      }));
+      .map((m) => {
+        const rawParts = m.parts?.length > 0
+          ? m.parts
+          : [{ type: 'text' as const, text: m.content }];
+
+        // Sanitize orphaned approval-requested parts → output-denied
+        const parts = rawParts.map((p) => {
+          if (p.type === 'dynamic-tool' && p.state === 'approval-requested') {
+            // Mutate in-memory state for consistency
+            p.state = 'output-denied';
+            p.approval = { ...p.approval, approved: false };
+            // Also fix the matching toolInvocation
+            const inv = m.toolInvocations?.find((t) => t.toolCallId === p.toolCallId);
+            if (inv) {
+              inv.state = 'output-denied';
+              inv.approval = { ...inv.approval, approved: false };
+            }
+            // Clear pendingApprovals referencing this invocation
+            if (m.pendingApprovals) {
+              m.pendingApprovals = m.pendingApprovals.filter(
+                (pa) => pa.toolCallId !== p.toolCallId
+              );
+              if (!m.pendingApprovals.length) m.pendingApprovals = undefined;
+            }
+          }
+          return p;
+        });
+
+        return { id: m.id, role: m.role, parts };
+      });
   }
 
   private buildToolHistory(): string[] {
@@ -1072,7 +1093,7 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
             requestId: m.requestId,
             feedbackRating: m.feedbackRating,
             latencyMs: m.latencyMs,
-            pendingApproval: m.pendingApproval
+            pendingApprovals: m.pendingApprovals
           }))
         }));
 
@@ -1110,8 +1131,15 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
               m.role === 'assistant' && m.content && this.marked
                 ? this.toSafeHtml(this.marked.parse(this.normalizeMarkdown(m.content)) as string)
                 : undefined,
-            toolInvocations: m.toolInvocations || undefined,
-            pendingApproval: m.pendingApproval || undefined
+            toolInvocations: (m.toolInvocations || []).map((t: any) => {
+              // Convert orphaned approval-requested → output-denied on restore
+              if (t.state === 'approval-requested') {
+                return { ...t, state: 'output-denied', approval: { ...t.approval, approved: false } };
+              }
+              return t;
+            }) || undefined,
+            // Migrate legacy singular pendingApproval → array, then clear stale
+            pendingApprovals: undefined
           }))
         })
       );
