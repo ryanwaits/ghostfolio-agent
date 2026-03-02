@@ -138,25 +138,70 @@ describe('createPrepareStep', () => {
   const skills = loadSkills(__dirname + '/skills');
   const prepareStep = createPrepareStep(skills, BASE);
 
-  it('includes all tools from step 0 (activity_manage auto-resolves accounts)', () => {
+  it('gates write tools on step 0 for read-intent queries', () => {
     const result = callPrepareStep(prepareStep, {
       steps: [],
       stepNumber: 0,
       model: {} as any,
-      messages: [],
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'How is my portfolio doing?' }] }
+      ] as ModelMessage[],
+      experimental_context: undefined
+    });
+
+    expect(result.activeTools).toContain('portfolio_analysis');
+    expect(result.activeTools).toContain('market_data');
+    expect(result.activeTools).not.toContain('activity_manage');
+    expect(result.activeTools).not.toContain('account_manage');
+    expect(result.activeTools).not.toContain('tag_manage');
+    expect(result.activeTools).not.toContain('watchlist_manage');
+  });
+
+  it('includes all tools on step 0 for write-intent queries', () => {
+    const result = callPrepareStep(prepareStep, {
+      steps: [],
+      stepNumber: 0,
+      model: {} as any,
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'Buy 10 AAPL at $185' }] }
+      ] as ModelMessage[],
       experimental_context: undefined
     });
 
     expect(result.activeTools).toContain('activity_manage');
-    expect(result.activeTools).toContain('portfolio_analysis');
-    expect(result.activeTools).toContain('portfolio_performance');
-    expect(result.activeTools).toContain('holdings_lookup');
-    expect(result.activeTools).toContain('market_data');
-    expect(result.activeTools).toContain('symbol_search');
-    expect(result.activeTools).toContain('transaction_history');
     expect(result.activeTools).toContain('account_manage');
-    expect(result.activeTools).toContain('tag_manage');
-    expect(result.activeTools).toContain('watchlist_manage');
+    expect(result.activeTools).toHaveLength(10);
+  });
+
+  it('includes all tools on step 1+ even for read-intent', () => {
+    const result = callPrepareStep(prepareStep, {
+      steps: [makeStep(['portfolio_analysis'])],
+      stepNumber: 1,
+      model: {} as any,
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'How is my portfolio doing?' }] }
+      ] as ModelMessage[],
+      experimental_context: undefined
+    });
+
+    expect(result.activeTools).toContain('activity_manage');
+    expect(result.activeTools).toHaveLength(10);
+  });
+
+  it('includes all tools on read-intent step 0 when priorToolHistory has write tool', () => {
+    const withHistory = createPrepareStep(skills, BASE, ['account_manage']);
+    const result = callPrepareStep(withHistory, {
+      steps: [],
+      stepNumber: 0,
+      model: {} as any,
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'How is my portfolio doing?' }] }
+      ] as ModelMessage[],
+      experimental_context: undefined
+    });
+
+    expect(result.activeTools).toContain('activity_manage');
+    expect(result.activeTools).toHaveLength(10);
   });
 
   it('includes transaction skill in system prompt on step 0', () => {
@@ -215,7 +260,7 @@ describe('createPrepareStep', () => {
     expect(system).not.toContain('MARKET DATA LOOKUPS');
   });
 
-  it('includes all tools regardless of priorToolHistory', () => {
+  it('includes all tools when priorToolHistory has write tool (even no messages)', () => {
     const withHistory = createPrepareStep(skills, BASE, ['account_manage']);
     const result = callPrepareStep(withHistory, {
       steps: [],
@@ -241,5 +286,47 @@ describe('createPrepareStep', () => {
 
     const system = result.system as string;
     expect(system).toContain('MARKET DATA LOOKUPS');
+  });
+
+  it('adds soft winddown nudge at step 5', () => {
+    const result = callPrepareStep(prepareStep, {
+      steps: Array(5).fill(makeStep([])),
+      stepNumber: 5,
+      model: {} as any,
+      messages: [],
+      experimental_context: undefined
+    });
+
+    const system = result.system as string;
+    expect(system).toContain('wrapping up');
+    expect(system).not.toContain('Synthesize');
+  });
+
+  it('adds hard winddown nudge at step 7', () => {
+    const result = callPrepareStep(prepareStep, {
+      steps: Array(7).fill(makeStep([])),
+      stepNumber: 7,
+      model: {} as any,
+      messages: [],
+      experimental_context: undefined
+    });
+
+    const system = result.system as string;
+    expect(system).toContain('Synthesize');
+    expect(system).toContain('3 left');
+  });
+
+  it('does not add winddown before step 5', () => {
+    const result = callPrepareStep(prepareStep, {
+      steps: Array(4).fill(makeStep([])),
+      stepNumber: 4,
+      model: {} as any,
+      messages: [],
+      experimental_context: undefined
+    });
+
+    const system = result.system as string;
+    expect(system).not.toContain('wrapping up');
+    expect(system).not.toContain('Synthesize');
   });
 });
