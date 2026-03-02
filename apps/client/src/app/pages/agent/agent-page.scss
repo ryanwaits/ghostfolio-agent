@@ -17,8 +17,10 @@
   --agent-bubble-user: #f3f4f6;
   --agent-ctx-bg: white;
   --agent-tooltip-bg: #f3f4f6;
-  --agent-shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  --agent-shadow-float: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+  --agent-shadow-card:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --agent-shadow-float:
+    0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
   --agent-send-bg: #4db6ac;
   --agent-send-hover: #3aa198;
   --agent-send-disabled-bg: #9ca3af;
@@ -29,6 +31,7 @@
   --agent-prompt-card-hover-shadow: var(--agent-shadow-float);
   --agent-input-focus-shadow: 0 0 0 3px #e0f2f1;
   --agent-rename-shadow: 0 0 0 2px #e0f2f1;
+  --agent-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
 }
 
 :host-context(.theme-dark) {
@@ -58,6 +61,7 @@
   --agent-prompt-card-hover-shadow: var(--agent-shadow-float);
   --agent-input-focus-shadow: 0 0 0 3px rgba(77, 182, 172, 0.15);
   --agent-rename-shadow: 0 0 0 2px rgba(77, 182, 172, 0.15);
+  --agent-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
 }
 
 // Tokens
@@ -104,9 +108,6 @@ $radius-sm: 8px;
   font-size: 14px;
   font-weight: 500;
   font-family: inherit;
-  letter-spacing: normal;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
   cursor: pointer;
   transition: background 0.15s;
 
@@ -149,14 +150,13 @@ $radius-sm: 8px;
   text-align: left;
   color: var(--agent-text);
   font-size: 14px;
-  font-weight: 400;
   font-family: inherit;
-  letter-spacing: normal;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 
   &.active {
-    color: var(--mat-tab-active-label-text-color, rgba(var(--palette-primary-500), 1));
+    color: var(
+      --mat-tab-active-label-text-color,
+      rgba(var(--palette-primary-500), 1)
+    );
   }
 
   ion-icon {
@@ -332,11 +332,10 @@ $radius-sm: 8px;
   border: 1px solid var(--agent-prompt-card-border);
   box-shadow: var(--agent-prompt-card-shadow);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  text-align: left;
   font-family: inherit;
 
   &:hover {
@@ -416,7 +415,7 @@ $radius-sm: 8px;
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 12px;
-    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-family: var(--agent-mono);
   }
 
   &::before {
@@ -440,10 +439,14 @@ $radius-sm: 8px;
   }
 }
 
-
 @keyframes pulse-dot {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 // Approval card
@@ -476,7 +479,7 @@ $radius-sm: 8px;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 12px;
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-family: var(--agent-mono);
   margin-bottom: 8px;
 }
 
@@ -486,7 +489,7 @@ $radius-sm: 8px;
   background: var(--agent-bg-input);
   border-radius: $radius-sm;
   font-size: 13px;
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-family: var(--agent-mono);
   color: var(--agent-text);
   white-space: pre-wrap;
   word-break: break-word;
@@ -502,7 +505,7 @@ $radius-sm: 8px;
 .deny-btn {
   padding: 6px 16px;
   border-radius: $radius-sm;
-  border: 1px solid transparent;
+  border: none;
   font-size: 13px;
   font-weight: 600;
   font-family: inherit;
@@ -521,7 +524,7 @@ $radius-sm: 8px;
 
 .deny-btn {
   background: transparent;
-  border-color: var(--agent-border);
+  border: 1px solid var(--agent-border);
   color: var(--agent-text-secondary);
 
   &:hover {
@@ -534,14 +537,6 @@ $radius-sm: 8px;
 .bubble {
   font-size: 15px;
   line-height: 1.5;
-}
-
-.message-group.assistant .bubble {
-  padding: 0;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  border-radius: 0;
 }
 
 .message-group.user .bubble {
@@ -630,7 +625,7 @@ $radius-sm: 8px;
   background: transparent;
   color: var(--agent-text-tertiary);
   font-size: 11px;
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-family: var(--agent-mono);
   cursor: default;
   transition: color 0.15s;
 
@@ -676,14 +671,26 @@ $radius-sm: 8px;
     opacity: 0.4;
     animation: typing 1.4s infinite;
 
-    &:nth-child(2) { animation-delay: 0.2s; }
-    &:nth-child(3) { animation-delay: 0.4s; }
+    &:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+    &:nth-child(3) {
+      animation-delay: 0.4s;
+    }
   }
 }
 
 @keyframes typing {
-  0%, 60%, 100% { opacity: 0.4; transform: scale(1); }
-  30% { opacity: 1; transform: scale(1.2); }
+  0%,
+  60%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
 }
 
 .input-container {
@@ -704,7 +711,9 @@ $radius-sm: 8px;
   border-radius: $radius-lg;
   padding: 8px;
   border: 1px solid transparent;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 
   &:focus-within {
     border-color: $primary;
@@ -767,8 +776,14 @@ $radius-sm: 8px;
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 // Model selector
@@ -793,10 +808,11 @@ $radius-sm: 8px;
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 
   &:hover {
-    background: var(--agent-bg-hover-strong);
     color: var(--agent-text);
   }
 
@@ -835,10 +851,7 @@ $radius-sm: 8px;
   transition: background 0.12s;
   text-align: left;
 
-  &:hover {
-    background: var(--agent-bg-hover);
-  }
-
+  &:hover,
   &.selected {
     background: var(--agent-bg-hover);
   }
