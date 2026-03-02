@@ -47,6 +47,7 @@ Additional costs:
 - **Avg tokens per query**: 4,328 (4,128 input + 200 output) — observed from production data
 - **Tool call frequency**: 1.9 tool calls/chat average (observed)
 - **Verification overhead**: Negligible (deterministic, no extra LLM calls)
+- **Cache warming overhead**: `warmPortfolioCache` runs after activity/account writes — Redis + BullMQ job, zero LLM tokens, up to 30s added latency per write operation
 - **Model mix**: 90% Sonnet 4.6, 8% Haiku 4.5, 2% Opus 4.6
 - **Blended cost per chat**: $0.0154 x 0.90 + $0.0051 x 0.08 + $0.0769 x 0.02 = $0.0157
 

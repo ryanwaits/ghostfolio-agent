@@ -4,7 +4,7 @@
 
 **Domain**: Personal finance portfolio management (Ghostfolio fork)
 
-**Problems solved**: Ghostfolio's existing UI requires manual navigation across multiple pages to understand portfolio state. The agent provides a conversational interface that synthesizes holdings, performance, market data, and transaction history into coherent natural language — and can execute write operations (account management, activity logging, watchlist, tags) with confirmation safeguards.
+**Problems solved**: Ghostfolio's existing UI requires manual navigation across multiple pages to understand portfolio state. The agent provides a conversational interface that synthesizes holdings, performance, market data, and transaction history into coherent natural language — and can execute write operations (account management, activity logging, watchlist, tags) with native tool approval gates.
 
 **Target users**: Self-directed investors tracking multi-asset portfolios (stocks, ETFs, crypto) who want quick portfolio insights without clicking through dashboards.
 
@@ -20,6 +20,7 @@
 | Model options | Haiku 4.5 ($0.005/chat), Sonnet 4.6 ($0.015/chat), Opus 4.6 ($0.077/chat) | User-selectable per session |
 | Schemas | Zod v4 | Required by AI SDK v6 `inputSchema` |
 | Database | Prisma + Postgres | Shared with Ghostfolio, plus agent-specific tables |
+| Cache warming | `warmPortfolioCache` helper | Redis + BullMQ (`PortfolioSnapshotService`) — ensures portfolio reads reflect recent writes |
 
 ### Request Flow
 
@@ -28,9 +29,10 @@ User message
     │
     ▼
 POST /api/v1/agent/chat (JWT auth)
+    Body: { messages: UIMessage[], toolHistory?, model?, approvedActions? }
     │
     ▼
-ToolLoopAgent.stream()
+ToolLoopAgent created → pipeAgentUIStreamToResponse()
     │
     ├─► prepareStep()
     │     ├─ Injects current date into system prompt
@@ -43,8 +45,16 @@ ToolLoopAgent.stream()
     ├─► Tool execution (try/catch per tool)
     │     └─ Returns structured JSON to LLM for synthesis
     │
-    ├─► SSE stream to client
-    │     └─ Events: text-delta, tool-input-start, tool-result, finish
+    ├─► Approval gate (write tools only)
+    │     ├─ needsApproval() evaluates per invocation
+    │     ├─ Skips: list actions, previously-approved signatures, SKIP_APPROVAL env
+    │     └─ If required: stream pauses → client shows approval card → resumes on approve/deny
+    │
+    ├─► Post-write cache warming (activity_manage, account_manage)
+    │     └─ warmPortfolioCache: clear Redis → drain stale jobs → enqueue HIGH priority → await (30s timeout)
+    │
+    ├─► SSE stream to client (UIMessage protocol)
+    │     └─ Events: text-delta, tool-input-start, tool-input-available, tool-approval-request, tool-output-available, finish
     │
     └─► onFinish callback
           ├─ Verification pipeline (3 systems)
@@ -70,6 +80,17 @@ ToolLoopAgent.stream()
 | `tag_manage` | Write | CRUD tags for transaction organization |
 
 **Auto-resolution**: `activity_manage` auto-resolves `accountId` when omitted on creates — matches accounts by asset type keywords (crypto → "crypto"/"wallet" accounts, stocks → "stock"/"brokerage" accounts) with fallback to highest-activity account. No tool gating; all 10 tools available from step 1.
+
+**Approval gates**: All 4 write tools define `needsApproval` — a function-based gate evaluated per invocation. Read-only actions (`list`) and previously-approved action signatures are auto-skipped. `SKIP_APPROVAL=true` env var disables all gates (used in evals). Action signatures follow the pattern `tool_name:action:identifier` (e.g., `activity_manage:create:AAPL`).
+
+| Tool | Approval Rule |
+|---|---|
+| `activity_manage` | `create` and `delete` only (not `update`), unless signature in `approvedActions` |
+| `account_manage` | Everything except `list`, unless signature in `approvedActions` |
+| `tag_manage` | Everything except `list` |
+| `watchlist_manage` | Everything except `list` |
+
+**Cache warming**: After every write operation in `activity_manage` and `account_manage`, `warmPortfolioCache()` runs — clears stale Redis portfolio snapshots, drains in-flight BullMQ jobs, enqueues fresh computation at HIGH priority, and awaits completion with a 30s timeout. Ensures subsequent read tools return up-to-date portfolio data. Injected via `PortfolioSnapshotService`, `RedisCacheService`, and `UserService`.
 
 **Skill injection**: Contextual SKILL.md documents (transaction workflow, market data patterns) are injected into the system prompt based on which tools have been used, providing the LLM with domain-specific guidance without bloating every request.
 
@@ -101,7 +122,7 @@ Three deterministic systems run on every response in the `onFinish` callback:
 
 **CI gate**: GitHub Actions runs golden set on every push to main. Threshold: 100%. Hits deployed Render instance.
 
-**Remaining 9% scenario gap**: Agent asks for confirmation on write operations (correct cautious behavior) and calls extra tools on ambiguous queries (thorough, not wrong).
+**Remaining 9% scenario gap**: Agent calls extra tools on ambiguous queries (thorough, not wrong). Write-operation approval is now handled by native `needsApproval` gates (bypassed in evals via `SKIP_APPROVAL=true`).
 
 ## Observability Setup
 
