@@ -45,7 +45,13 @@ export async function callAgent(prompt: string): Promise<AgentResponse> {
       Authorization: `Bearer ${jwt}`
     },
     body: JSON.stringify({
-      messages: [{ role: 'user', content: prompt }]
+      messages: [
+        {
+          id: crypto.randomUUID(),
+          role: 'user' as const,
+          parts: [{ type: 'text', text: prompt }]
+        }
+      ]
     })
   });
 
