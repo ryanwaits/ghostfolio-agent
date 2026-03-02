@@ -46,23 +46,47 @@ import {
 import { Subject, takeUntil } from 'rxjs';
 
 
-interface StepSegment {
-  text: string;
-  isIntermediate: boolean;
+interface ToolInvocation {
+  toolCallId: string;
+  toolName: string;
+  state:
+    | 'input-streaming'
+    | 'input-available'
+    | 'approval-requested'
+    | 'approval-responded'
+    | 'output-available'
+    | 'output-denied';
+  input?: unknown;
+  output?: unknown;
+  approval?: { id: string; approved?: boolean; reason?: string };
 }
 
+type ChatMessagePart =
+  | { type: 'text'; text: string }
+  | {
+      type: 'dynamic-tool';
+      toolCallId: string;
+      toolName: string;
+      state: string;
+      input?: unknown;
+      output?: unknown;
+      approval?: { id: string; approved?: boolean };
+    };
+
 interface ChatMessage {
+  id: string;
   role: 'user' | 'assistant';
   content: string;
+  parts: ChatMessagePart[];
   html?: SafeHtml;
   isStreaming?: boolean;
   activeTools?: string[];
-  stepSegments?: StepSegment[];
-  toolsExpanded?: boolean;
+  toolInvocations?: ToolInvocation[];
   requestId?: string;
   feedbackRating?: number;
   latencyMs?: number;
   verificationData?: any;
+  pendingApproval?: ToolInvocation;
 }
 
 interface Conversation {
@@ -141,6 +165,7 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly STORAGE_KEY = 'agent-conversations';
   private static readonly MAX_CONVERSATIONS = 50;
 
+  private approvedActions: string[] = [];
   private chartInitializer = new ChartInitializer();
   private marked: typeof import('marked') | null = null;
   private remend: ((md: string) => string) | null = null;
@@ -377,25 +402,6 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  public getThinkingSegments(message: ChatMessage): StepSegment[] {
-    const content = message.content || '';
-    return (message.stepSegments || []).filter((s) => {
-      if (!s.isIntermediate || !s.text.trim()) return false;
-      // Strip markdown heading markers and check for duplication in final output
-      const cleaned = s.text.trim().replace(/^#+\s*/gm, '').trim();
-      return cleaned.length > 0 && !content.includes(cleaned);
-    });
-  }
-
-  public hasThinking(message: ChatMessage): boolean {
-    return this.getThinkingSegments(message).length > 0;
-  }
-
-  public toggleToolsExpanded(message: ChatMessage) {
-    message.toolsExpanded = !message.toolsExpanded;
-    this.changeDetectorRef.markForCheck();
-  }
-
   public async copyMessage(message: ChatMessage) {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -463,6 +469,276 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // Approval UI
+  public formatToolName(toolName: string): string {
+    return toolName.replace(/_/g, ' ');
+  }
+
+  public formatApprovalInput(inv: ToolInvocation): string {
+    const input = inv.input as Record<string, any>;
+
+    if (!input) return JSON.stringify(inv.input, null, 2);
+
+    switch (inv.toolName) {
+      case 'activity_manage': {
+        const parts = [input.type, input.quantity, input.symbol].filter(
+          Boolean
+        );
+        if (input.unitPrice) parts.push(`@ $${input.unitPrice}`);
+        if (input.date) parts.push(`on ${input.date}`);
+        if (input.currency) parts.push(`(${input.currency})`);
+        return parts.join(' ') || input.action;
+      }
+      case 'account_manage': {
+        if (input.action === 'create')
+          return `Create account: ${input.name} (${input.currency})`;
+        if (input.action === 'update')
+          return `Update account balance to ${input.balance}`;
+        if (input.action === 'delete') return `Delete account`;
+        if (input.action === 'transfer')
+          return `Transfer ${input.balance} between accounts`;
+        return input.action;
+      }
+      case 'tag_manage':
+        return `${input.action} tag: ${input.name || input.tagId}`;
+      case 'watchlist_manage':
+        return `${input.action} ${input.symbol} (${input.dataSource})`;
+      default:
+        return JSON.stringify(input, null, 2);
+    }
+  }
+
+  public async handleApproval(message: ChatMessage, approved: boolean) {
+    const inv = message.pendingApproval;
+
+    if (!inv) return;
+
+    message.pendingApproval = undefined;
+
+    // Update tool invocation state
+    if (approved) {
+      inv.state = 'approval-responded';
+      inv.approval = { ...inv.approval, approved: true };
+    } else {
+      inv.state = 'output-denied';
+      inv.approval = { ...inv.approval, approved: false };
+    }
+
+    // Update corresponding part in message.parts
+    const toolPart = message.parts.find(
+      (p): p is Extract<ChatMessagePart, { type: 'dynamic-tool' }> =>
+        p.type === 'dynamic-tool' && p.toolCallId === inv.toolCallId
+    );
+    if (toolPart) {
+      toolPart.state = inv.state;
+      toolPart.approval = { id: inv.approval.id, approved: inv.approval.approved };
+      // approval-responded/output-denied must NOT have output
+      delete toolPart.output;
+    }
+
+    if (approved) {
+      // Track action signature for prerequisite skip
+      const input = inv.input as Record<string, any>;
+      const sig = `${inv.toolName}:${input?.action ?? ''}:${input?.symbol ?? input?.name ?? input?.accountId ?? ''}`;
+      if (!this.approvedActions.includes(sig)) {
+        this.approvedActions.push(sig);
+      }
+
+      this.persistConversations();
+      this.changeDetectorRef.markForCheck();
+
+      // Resume: send UIMessages (with approval-responded parts) to server
+      // and stream the response into the SAME assistant message
+      this.resumeAfterApproval(message);
+    } else {
+      this.persistConversations();
+      this.changeDetectorRef.markForCheck();
+    }
+  }
+
+  /**
+   * Resume streaming into the SAME assistant message after an approval.
+   * The server executes the approved tool and streams back tool-output-available
+   * + the model's continuation text. We update the existing invocations in-place
+   * so the message ends with output-available parts (not approval-responded),
+   * which converts cleanly on future turns.
+   */
+  private async resumeAfterApproval(assistantMessage: ChatMessage) {
+    if (!this.activeConversation) return;
+
+    this.isLoading = true;
+    assistantMessage.isStreaming = true;
+    this.changeDetectorRef.markForCheck();
+
+    let fullText = '';
+
+    this.renderDirty = false;
+    this.renderInterval = setInterval(() => {
+      if (!this.renderDirty) return;
+      this.renderDirty = false;
+
+      if (this.marked && this.remend) {
+        const streamSafe = this.stripTrailingFencedBlock(fullText);
+        assistantMessage.content = fullText;
+        assistantMessage.html = this.toSafeHtml(
+          this.marked.parse(
+            this.normalizeMarkdown(this.remend(streamSafe))
+          ) as string
+        );
+      }
+
+      this.changeDetectorRef.markForCheck();
+      this.scrollToBottom();
+    }, 80);
+
+    const streamStart = Date.now();
+
+    try {
+      const token = this.tokenStorageService.getToken();
+      const uiMessages = this.buildUIMessages();
+      const toolHistory = this.buildToolHistory();
+
+      const response = await fetch('/api/v1/agent/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          messages: uiMessages,
+          toolHistory: toolHistory.length > 0 ? toolHistory : undefined,
+          model: this.selectedModel,
+          approvedActions:
+            this.approvedActions.length > 0
+              ? this.approvedActions
+              : undefined
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+
+          const data = trimmed.slice(6);
+          if (data === '[DONE]') continue;
+
+          try {
+            const evt = JSON.parse(data);
+
+            if (evt.toolName && typeof evt.toolName === 'string') {
+              if (!assistantMessage.activeTools)
+                assistantMessage.activeTools = [];
+              if (!assistantMessage.activeTools.includes(evt.toolName))
+                assistantMessage.activeTools.push(evt.toolName);
+              this.renderDirty = true;
+            }
+
+            // Track tool invocations — check existing first (for approved tools)
+            if (evt.type === 'tool-input-start') {
+              const existing = assistantMessage.toolInvocations?.find(
+                (t) => t.toolCallId === evt.toolCallId
+              );
+              if (!existing) {
+                if (!assistantMessage.toolInvocations)
+                  assistantMessage.toolInvocations = [];
+                assistantMessage.toolInvocations.push({
+                  toolCallId: evt.toolCallId,
+                  toolName: evt.toolName,
+                  state: 'input-streaming'
+                });
+              }
+            } else if (evt.type === 'tool-input-available') {
+              const inv = assistantMessage.toolInvocations?.find(
+                (t) => t.toolCallId === evt.toolCallId
+              );
+              if (inv) {
+                inv.state = 'input-available';
+                inv.input = evt.input;
+              }
+            } else if (evt.type === 'tool-approval-request') {
+              const inv = assistantMessage.toolInvocations?.find(
+                (t) => t.toolCallId === evt.toolCallId
+              );
+              if (inv) {
+                inv.state = 'approval-requested';
+                inv.approval = { id: evt.approvalId };
+                assistantMessage.pendingApproval = inv;
+                this.renderDirty = true;
+              }
+            } else if (evt.type === 'tool-output-available') {
+              // This is the key event for approval resume: updates the
+              // approved invocation from approval-responded → output-available
+              const inv = assistantMessage.toolInvocations?.find(
+                (t) => t.toolCallId === evt.toolCallId
+              );
+              if (inv) {
+                inv.state = 'output-available';
+                inv.output = evt.output;
+              }
+            }
+
+            if (evt.type === 'text-delta') {
+              fullText += evt.delta;
+              this.renderDirty = true;
+            } else if (
+              (evt.type === 'finish' || evt.type === 'message-metadata') &&
+              evt.messageMetadata?.requestId
+            ) {
+              assistantMessage.requestId = evt.messageMetadata.requestId;
+            }
+          } catch {
+            // Skip malformed JSON
+          }
+        }
+      }
+
+      this.clearRenderInterval();
+      const newContent = fullText.trim();
+      if (newContent) {
+        assistantMessage.content = newContent;
+        if (this.marked) {
+          assistantMessage.html = this.toSafeHtml(
+            this.marked.parse(
+              this.normalizeMarkdown(assistantMessage.content)
+            ) as string
+          );
+        }
+      }
+
+      // Rebuild parts — tool invocations should now be output-available
+      this.rebuildParts(assistantMessage);
+
+      setTimeout(() => this.chartInitializer.scan());
+    } catch (err) {
+      this.clearRenderInterval();
+      assistantMessage.content = `Error: ${err.message}`;
+    }
+
+    assistantMessage.latencyMs = Date.now() - streamStart;
+    assistantMessage.isStreaming = false;
+    this.isLoading = false;
+    this.persistConversations();
+    this.changeDetectorRef.markForCheck();
+    this.scrollToBottom();
+    this.focusInput();
+  }
+
   // Model selector
   public selectModel(id: string) {
     this.selectedModel = id;
@@ -491,7 +767,12 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.isLoading = true;
 
-    const userMessage: ChatMessage = { role: 'user', content: text };
+    const userMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: text,
+      parts: [{ type: 'text', text }]
+    };
     this.activeConversation.messages.push(userMessage);
 
     if (
@@ -503,10 +784,12 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     const assistantMessage: ChatMessage = {
+      id: crypto.randomUUID(),
       role: 'assistant',
       content: '',
+      parts: [],
       isStreaming: true,
-      stepSegments: []
+      toolInvocations: []
     };
     this.activeConversation.messages.push(assistantMessage);
     this.changeDetectorRef.markForCheck();
@@ -514,14 +797,7 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.ensureChartObserver();
 
     let fullText = '';
-    let currentStepText = '';
-    let stepHasTools = false;
-    const stepSegments: StepSegment[] = [];
 
-    // Start render interval — batches token deltas at ~12fps
-    // Intermediate step text (before tool calls) is never rendered — only
-    // final step text streams as live markdown.
-    let inIntermediateStep = false;
     this.renderDirty = false;
     this.renderInterval = setInterval(() => {
       if (!this.renderDirty) {
@@ -529,10 +805,9 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
       }
       this.renderDirty = false;
 
-      if (!inIntermediateStep && this.marked && this.remend) {
-        const renderText = stepSegments.length > 0 ? currentStepText : fullText;
-        const streamSafe = this.stripTrailingFencedBlock(renderText);
-        assistantMessage.content = renderText;
+      if (this.marked && this.remend) {
+        const streamSafe = this.stripTrailingFencedBlock(fullText);
+        assistantMessage.content = fullText;
         assistantMessage.html = this.toSafeHtml(
           this.marked.parse(this.normalizeMarkdown(this.remend(streamSafe))) as string
         );
@@ -546,14 +821,8 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
     try {
       const token = this.tokenStorageService.getToken();
-      const conversationMessages = this.activeConversation.messages
-        .filter((m) => m.content)
-        .map((m) => ({ role: m.role, content: m.content }));
-      const toolHistory = [
-        ...new Set(
-          this.activeConversation.messages.flatMap((m) => m.activeTools || [])
-        )
-      ];
+      const uiMessages = this.buildUIMessages();
+      const toolHistory = this.buildToolHistory();
 
       const response = await fetch('/api/v1/agent/chat', {
         method: 'POST',
@@ -562,9 +831,13 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({
-          messages: conversationMessages,
+          messages: uiMessages,
           toolHistory: toolHistory.length > 0 ? toolHistory : undefined,
-          model: this.selectedModel
+          model: this.selectedModel,
+          approvedActions:
+            this.approvedActions.length > 0
+              ? this.approvedActions
+              : undefined
         })
       });
 
@@ -607,46 +880,53 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
               if (!assistantMessage.activeTools.includes(evt.toolName)) {
                 assistantMessage.activeTools.push(evt.toolName);
               }
-              // First tool in this step: flush accumulated text as intermediate
-              if (!stepHasTools && currentStepText.trim()) {
-                stepSegments.push({ text: currentStepText, isIntermediate: true });
-                currentStepText = '';
-                stepHasTools = true;
-              }
-              inIntermediateStep = true;
-              // Clear any rendered intermediate text from the bubble
-              assistantMessage.content = '';
-              assistantMessage.html = undefined;
               this.renderDirty = true;
+            }
+
+            // Track tool invocations for UIMessage parts
+            if (evt.type === 'tool-input-start') {
+              const invocation: ToolInvocation = {
+                toolCallId: evt.toolCallId,
+                toolName: evt.toolName,
+                state: 'input-streaming'
+              };
+              assistantMessage.toolInvocations.push(invocation);
+            } else if (evt.type === 'tool-input-available') {
+              const inv = assistantMessage.toolInvocations?.find(
+                (t) => t.toolCallId === evt.toolCallId
+              );
+              if (inv) {
+                inv.state = 'input-available';
+                inv.input = evt.input;
+              }
+            } else if (evt.type === 'tool-approval-request') {
+              const inv = assistantMessage.toolInvocations?.find(
+                (t) => t.toolCallId === evt.toolCallId
+              );
+              if (inv) {
+                inv.state = 'approval-requested';
+                inv.approval = { id: evt.approvalId };
+                assistantMessage.pendingApproval = inv;
+                this.renderDirty = true;
+              }
+            } else if (evt.type === 'tool-output-available') {
+              const inv = assistantMessage.toolInvocations?.find(
+                (t) => t.toolCallId === evt.toolCallId
+              );
+              if (inv) {
+                inv.state = 'output-available';
+                inv.output = evt.output;
+              }
             }
 
             if (evt.type === 'text-delta') {
               fullText += evt.delta;
-              currentStepText += evt.delta;
-              if (!inIntermediateStep) {
-                this.renderDirty = true;
-              }
+              this.renderDirty = true;
             } else if (
               (evt.type === 'finish' || evt.type === 'message-metadata') &&
               evt.messageMetadata?.requestId
             ) {
               assistantMessage.requestId = evt.messageMetadata.requestId;
-            } else if (
-              evt.type === 'message-metadata' &&
-              evt.messageMetadata?.stepFinish
-            ) {
-              // Only push if toolName handler didn't already flush this step
-              if (!stepHasTools && currentStepText.trim()) {
-                const isIntermediate = evt.messageMetadata.finishReason === 'tool-calls';
-                stepSegments.push({ text: currentStepText, isIntermediate });
-              }
-              currentStepText = '';
-              stepHasTools = false;
-              // After a tool-calls step, next text is still potentially intermediate
-              // until we see it's the final step. But we optimistically render it
-              // since most final steps don't call more tools.
-              inIntermediateStep = false;
-              this.renderDirty = true;
             }
           } catch {
             // Skip malformed JSON
@@ -664,22 +944,11 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
               const evt = JSON.parse(data);
               if (evt.type === 'text-delta') {
                 fullText += evt.delta;
-                currentStepText += evt.delta;
               } else if (
                 (evt.type === 'finish' || evt.type === 'message-metadata') &&
                 evt.messageMetadata?.requestId
               ) {
                 assistantMessage.requestId = evt.messageMetadata.requestId;
-              } else if (
-                evt.type === 'message-metadata' &&
-                evt.messageMetadata?.stepFinish
-              ) {
-                if (!stepHasTools && currentStepText.trim()) {
-                  const isIntermediate = evt.messageMetadata.finishReason === 'tool-calls';
-                  stepSegments.push({ text: currentStepText, isIntermediate });
-                }
-                currentStepText = '';
-                stepHasTools = false;
               }
             } catch {
               // Skip malformed JSON
@@ -688,24 +957,16 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       }
 
-      // Flush any remaining step text as final
-      if (currentStepText.trim()) {
-        stepSegments.push({ text: currentStepText, isIntermediate: false });
-      }
-      assistantMessage.stepSegments = stepSegments;
-
-      // Final render — only non-intermediate segments as main markdown
       this.clearRenderInterval();
-      const finalText = stepSegments
-        .filter((s) => !s.isIntermediate)
-        .map((s) => s.text)
-        .join('');
-      assistantMessage.content = finalText || fullText;
+      assistantMessage.content = fullText;
       if (assistantMessage.content && this.marked) {
         assistantMessage.html = this.toSafeHtml(
           this.marked.parse(this.normalizeMarkdown(assistantMessage.content)) as string
         );
       }
+
+      // Build parts array from text + tool invocations
+      this.rebuildParts(assistantMessage);
 
       // Re-scan for chart canvases after final innerHTML update
       setTimeout(() => this.chartInitializer.scan());
@@ -721,6 +982,67 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.changeDetectorRef.markForCheck();
     this.scrollToBottom();
     this.focusInput();
+  }
+
+  /**
+   * Build UIMessages from the active conversation, sending full parts
+   * (including dynamic-tool parts) so the SDK can properly handle
+   * tool call/result pairs and approval flows.
+   */
+  private buildUIMessages() {
+    return this.activeConversation.messages
+      .filter((m) => m.parts?.length > 0 || m.content)
+      .map((m) => ({
+        id: m.id,
+        role: m.role,
+        parts:
+          m.parts?.length > 0
+            ? m.parts
+            : [{ type: 'text' as const, text: m.content }]
+      }));
+  }
+
+  private buildToolHistory(): string[] {
+    return [
+      ...new Set(
+        this.activeConversation.messages.flatMap((m) => m.activeTools || [])
+      )
+    ];
+  }
+
+  /**
+   * Rebuild the parts array from the message's content and tool invocations.
+   * Ensures tool parts have the correct Zod-compatible shape for each state.
+   */
+  private rebuildParts(message: ChatMessage) {
+    const parts: ChatMessagePart[] = [];
+    if (message.content) {
+      parts.push({ type: 'text', text: message.content });
+    }
+    for (const inv of message.toolInvocations || []) {
+      const part: Extract<ChatMessagePart, { type: 'dynamic-tool' }> = {
+        type: 'dynamic-tool',
+        toolCallId: inv.toolCallId,
+        toolName: inv.toolName,
+        state: inv.state,
+        input: inv.input
+      };
+      // Only include output for states that have it
+      if (inv.state === 'output-available' && inv.output !== undefined) {
+        part.output = inv.output;
+      }
+      // Include approval for states that need it
+      if (inv.approval) {
+        part.approval = {
+          id: inv.approval.id,
+          ...(inv.approval.approved !== undefined
+            ? { approved: inv.approval.approved }
+            : {})
+        };
+      }
+      parts.push(part);
+    }
+    message.parts = parts;
   }
 
   private sortConversations() {
@@ -741,13 +1063,16 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
           createdAt: c.createdAt,
           pinned: c.pinned || false,
           messages: c.messages.map((m) => ({
+            id: m.id,
             role: m.role,
             content: m.content,
+            parts: m.parts,
             activeTools: m.activeTools,
-            stepSegments: m.stepSegments,
+            toolInvocations: m.toolInvocations,
             requestId: m.requestId,
             feedbackRating: m.feedbackRating,
-            latencyMs: m.latencyMs
+            latencyMs: m.latencyMs,
+            pendingApproval: m.pendingApproval
           }))
         }));
 
@@ -771,17 +1096,22 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
       const { activeId, conversations } = JSON.parse(raw);
 
       this.conversations = (conversations || []).map(
-        (c: { id: string; title: string; createdAt: string; pinned?: boolean; messages: ChatMessage[] }) => ({
+        (c: { id: string; title: string; createdAt: string; pinned?: boolean; messages: any[] }) => ({
           ...c,
           createdAt: new Date(c.createdAt),
           pinned: c.pinned || false,
-          messages: c.messages.map((m: ChatMessage) => ({
+          messages: c.messages.map((m: any) => ({
             ...m,
+            id: m.id || crypto.randomUUID(),
+            parts: (m.parts || [{ type: 'text', text: m.content || '' }]).map(
+              (p: any) => p.type === 'tool-invocation' ? { ...p, type: 'dynamic-tool' } : p
+            ),
             html:
               m.role === 'assistant' && m.content && this.marked
                 ? this.toSafeHtml(this.marked.parse(this.normalizeMarkdown(m.content)) as string)
                 : undefined,
-            stepSegments: m.stepSegments || undefined
+            toolInvocations: m.toolInvocations || undefined,
+            pendingApproval: m.pendingApproval || undefined
           }))
         })
       );
@@ -814,8 +1144,19 @@ export class GfAgentPageComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private normalizeMarkdown(text: string): string {
-    // Ensure headings always have a blank line before them
-    return text.replace(/([^\n])(#{1,6}\s)/g, '$1\n\n$2');
+    // Ensure headings at the start of a line have a blank line before them.
+    // Only match # after \n (line start), not mid-line (avoids breaking
+    // table cells like "| # of Trades |").
+    let result = text.replace(/\n(#{1,6}\s)/g, '\n\n$1');
+
+    // Ensure custom fenced blocks start on their own line so marked
+    // parses them as fenced code blocks, not inline backticks.
+    result = result.replace(
+      /([^\n])(```(?:suggestions|metrics|sparkline|chart-area|chart-bar))/g,
+      '$1\n\n$2'
+    );
+
+    return result;
   }
 
   private postProcess(html: string): string {
