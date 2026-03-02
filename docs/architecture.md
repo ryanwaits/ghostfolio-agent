@@ -140,4 +140,6 @@ Three deterministic systems run on every response in the `onFinish` callback:
 
 ## Open Source Contribution
 
+**Framework contribution**: PR to upstream Ghostfolio adding a conversational AI agent layer — [ghostfolio/ghostfolio#6458](https://github.com/ghostfolio/ghostfolio/pull/6458). Adds 10 domain-specific tools, `ToolLoopAgent` orchestration with `prepareStep` intent gating, native `needsApproval` approval gates for write operations, a 3-system deterministic verification pipeline, and full observability (structured trace logging, token/cost tracking, user feedback). Built on Vercel AI SDK v6 + Claude.
+
 **Eval dataset**: 86-case structured JSON dataset (`evals/dataset.json`) covering tool routing, multi-tool chaining, write operations, adversarial inputs, and edge cases for a financial AI agent. Each case includes input query, expected tools, expected behavioral assertions, and category labels. Published in the repository for reuse by other Ghostfolio agent implementations.
