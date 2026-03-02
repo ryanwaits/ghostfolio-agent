@@ -173,6 +173,23 @@ describe('createPrepareStep', () => {
     expect(result.activeTools).toHaveLength(10);
   });
 
+  it('preserves write intent from earlier messages in multi-turn conversation', () => {
+    const result = callPrepareStep(prepareStep, {
+      steps: [],
+      stepNumber: 0,
+      model: {} as any,
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'I want to buy some Bitcoin' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'Bitcoin is at $66,906. How much?' }] },
+        { role: 'user', content: [{ type: 'text', text: '0.25' }] }
+      ] as ModelMessage[],
+      experimental_context: undefined
+    });
+
+    expect(result.activeTools).toContain('activity_manage');
+    expect(result.activeTools).toHaveLength(10);
+  });
+
   it('includes all tools on step 1+ even for read-intent', () => {
     const result = callPrepareStep(prepareStep, {
       steps: [makeStep(['portfolio_analysis'])],

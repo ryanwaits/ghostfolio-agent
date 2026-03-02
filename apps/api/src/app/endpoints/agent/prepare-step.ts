@@ -68,23 +68,27 @@ const WRITE_KEYWORDS = [
 ];
 
 function classifyIntent(messages: ModelMessage[]): 'read' | 'write' {
-  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  const userMessages = messages.filter((m) => m.role === 'user');
 
-  if (!lastUser) return 'read';
+  if (userMessages.length === 0) return 'read';
 
-  const text =
-    typeof lastUser.content === 'string'
-      ? lastUser.content
-      : Array.isArray(lastUser.content)
-        ? lastUser.content
-            .filter((p: any) => p.type === 'text')
-            .map((p: any) => p.text)
-            .join(' ')
-        : '';
+  for (const msg of userMessages) {
+    const text =
+      typeof msg.content === 'string'
+        ? msg.content
+        : Array.isArray(msg.content)
+          ? msg.content
+              .filter((p: any) => p.type === 'text')
+              .map((p: any) => p.text)
+              .join(' ')
+          : '';
 
-  return WRITE_KEYWORDS.some((kw) => text.toLowerCase().includes(kw))
-    ? 'write'
-    : 'read';
+    if (WRITE_KEYWORDS.some((kw) => text.toLowerCase().includes(kw))) {
+      return 'write';
+    }
+  }
+
+  return 'read';
 }
 
 /**
