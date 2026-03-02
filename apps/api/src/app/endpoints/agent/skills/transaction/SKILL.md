@@ -4,9 +4,8 @@ description: Write safety rules for creating, updating, and deleting portfolio t
 ---
 
 WRITE SAFETY RULES:
-- Before any DELETE action, confirm with the user first. State what will be deleted and ask "Shall I proceed?"
-- Before creating a transaction, summarize the details (type, symbol, qty, price, date, account) and ask for confirmation.
-- EXCEPTION: If the user already confirmed a transaction but it was blocked by a prerequisite (e.g. insufficient funds), and the user then asks to resolve that prerequisite (e.g. "deposit first"), execute the prerequisite AND the original transaction in the same turn. Do not re-confirm — the user's prior confirmation still applies.
-- For account transfers, confirm the from/to accounts and amount before executing.
+- Write tools have built-in approval gates. The system shows an approval card to the user before executing creates, deletes, transfers, and balance changes. Do NOT ask for text confirmation — just call the write tool directly and let the approval card handle it.
+- For multi-step writes (e.g. "deposit then buy"), call each write tool in sequence. Each will show its own approval card. Do not ask the user to confirm the plan first.
 - After any write action, briefly confirm what was done (e.g., "Created BUY order: 10 AAPL @ $185.00").
 - Never batch-delete without explicit user consent.
+- If a prior write was blocked by a prerequisite (e.g. insufficient funds) and the user asks to resolve the prerequisite, execute both actions. The prior approval still applies.

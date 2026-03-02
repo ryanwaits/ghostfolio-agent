@@ -1,12 +1,16 @@
 import { AccountService } from '@ghostfolio/api/app/account/account.service';
 import { OrderService } from '@ghostfolio/api/app/order/order.service';
+import { RedisCacheService } from '@ghostfolio/api/app/redis-cache/redis-cache.service';
 import { UserService } from '@ghostfolio/api/app/user/user.service';
 import { DataProviderService } from '@ghostfolio/api/services/data-provider/data-provider.service';
+import { PortfolioSnapshotService } from '@ghostfolio/api/services/queues/portfolio-snapshot/portfolio-snapshot.service';
 
 import type { DataSource, Type as ActivityType } from '@prisma/client';
 import { tool } from 'ai';
 import { parseISO } from 'date-fns';
 import { z } from 'zod';
+
+import { warmPortfolioCache } from '../helpers/warm-portfolio-cache';
 
 /**
  * Auto-resolve a CoinGecko slug from a raw ticker symbol.
@@ -64,25 +68,40 @@ function resolveAccount(
 
 export function createActivityManageTool({
   accountService,
+  approvedActions,
   dataProviderService,
   orderService,
+  portfolioSnapshotService,
+  redisCacheService,
   userService,
   userId
 }: {
   accountService: AccountService;
+  approvedActions?: string[];
   dataProviderService: DataProviderService;
   orderService: OrderService;
+  portfolioSnapshotService: PortfolioSnapshotService;
+  redisCacheService: RedisCacheService;
   userService: UserService;
   userId: string;
 }) {
   return tool({
     description:
-      'Create, update, or delete portfolio transactions (activities). Supports BUY, SELL, DIVIDEND, FEE, INTEREST, and LIABILITY types. Always confirm transaction details with the user before creating or deleting.',
+      'Create, update, or delete portfolio transactions (activities). Supports BUY, SELL, DIVIDEND, FEE, INTEREST, and LIABILITY types.',
+    needsApproval:
+      process.env.SKIP_APPROVAL === 'true'
+        ? false
+        : (input) => {
+            if (input.action !== 'create' && input.action !== 'delete')
+              return false;
+            const sig = `activity_manage:${input.action}:${input.symbol ?? ''}`;
+            return !approvedActions?.includes(sig);
+          },
     inputSchema: z.object({
       action: z
         .enum(['create', 'update', 'delete'])
         .describe(
-          "Action to perform. 'create': record a new transaction. 'update': modify an existing one. 'delete': permanently remove (confirm with user first)."
+          "Action to perform. 'create': record a new transaction. 'update': modify an existing one. 'delete': permanently remove."
         ),
       type: z
         .enum(['BUY', 'SELL', 'DIVIDEND', 'FEE', 'INTEREST', 'LIABILITY'])
@@ -227,6 +246,15 @@ export function createActivityManageTool({
               userId
             });
 
+            try {
+              await warmPortfolioCache({
+                portfolioSnapshotService,
+                redisCacheService,
+                userService,
+                userId
+              });
+            } catch {}
+
             return {
               id: order.id,
               type: input.type,
@@ -321,6 +349,15 @@ export function createActivityManageTool({
               where: { id: input.orderId }
             });
 
+            try {
+              await warmPortfolioCache({
+                portfolioSnapshotService,
+                redisCacheService,
+                userService,
+                userId
+              });
+            } catch {}
+
             return {
               updated: true,
               id: input.orderId,
@@ -346,6 +383,15 @@ export function createActivityManageTool({
             const deletedOrder = await orderService.deleteOrder({
               id: input.orderId
             });
+
+            try {
+              await warmPortfolioCache({
+                portfolioSnapshotService,
+                redisCacheService,
+                userService,
+                userId
+              });
+            } catch {}
 
             return {
               deleted: true,

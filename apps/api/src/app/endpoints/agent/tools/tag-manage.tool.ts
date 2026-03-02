@@ -13,6 +13,10 @@ export function createTagManageTool({
   return tool({
     description:
       'Manage tags for organizing and categorizing transactions. Tags can be applied to activities to group them (e.g., "Long Term", "Tax Loss Harvest", "Retirement"). Use this to create new tags, rename existing ones, delete unused tags, or list all available tags.',
+    needsApproval:
+      process.env.SKIP_APPROVAL === 'true'
+        ? false
+        : (input) => input.action !== 'list',
     inputSchema: z.object({
       action: z
         .enum(['create', 'update', 'delete', 'list'])

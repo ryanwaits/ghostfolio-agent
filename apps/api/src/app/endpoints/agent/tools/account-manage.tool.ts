@@ -1,18 +1,39 @@
 import { AccountService } from '@ghostfolio/api/app/account/account.service';
+import { RedisCacheService } from '@ghostfolio/api/app/redis-cache/redis-cache.service';
+import { UserService } from '@ghostfolio/api/app/user/user.service';
+import { PortfolioSnapshotService } from '@ghostfolio/api/services/queues/portfolio-snapshot/portfolio-snapshot.service';
 
 import { tool } from 'ai';
 import { z } from 'zod';
 
+import { warmPortfolioCache } from '../helpers/warm-portfolio-cache';
+
 export function createAccountManageTool({
   accountService,
+  approvedActions,
+  portfolioSnapshotService,
+  redisCacheService,
+  userService,
   userId
 }: {
   accountService: AccountService;
+  approvedActions?: string[];
+  portfolioSnapshotService: PortfolioSnapshotService;
+  redisCacheService: RedisCacheService;
+  userService: UserService;
   userId: string;
 }) {
   return tool({
     description:
       'Manage investment accounts (brokerages, banks, wallets). Use this to create new accounts, update account details, delete empty accounts, transfer cash between accounts, or list all accounts with balances. IMPORTANT: Deposits and withdrawals are performed by updating the account balance (action: "update"). Do NOT use activity_manage for deposits or withdrawals — just set the new balance here and it will automatically be tracked in transaction_history.',
+    needsApproval:
+      process.env.SKIP_APPROVAL === 'true'
+        ? false
+        : (input) => {
+            if (input.action === 'list') return false;
+            const sig = `account_manage:${input.action}:${input.name ?? input.accountId ?? ''}`;
+            return !approvedActions?.includes(sig);
+          },
     inputSchema: z.object({
       action: z
         .enum(['create', 'update', 'delete', 'transfer', 'list'])
@@ -82,6 +103,15 @@ export function createAccountManageTool({
               userId
             );
 
+            try {
+              await warmPortfolioCache({
+                portfolioSnapshotService,
+                redisCacheService,
+                userService,
+                userId
+              });
+            } catch {}
+
             return {
               id: account.id,
               name: account.name,
@@ -138,6 +168,15 @@ export function createAccountManageTool({
               userId
             );
 
+            try {
+              await warmPortfolioCache({
+                portfolioSnapshotService,
+                redisCacheService,
+                userService,
+                userId
+              });
+            } catch {}
+
             return {
               id: account.id,
               name: account.name,
@@ -165,6 +204,15 @@ export function createAccountManageTool({
             await accountService.deleteAccount({
               id_userId: { id: input.accountId, userId }
             });
+
+            try {
+              await warmPortfolioCache({
+                portfolioSnapshotService,
+                redisCacheService,
+                userService,
+                userId
+              });
+            } catch {}
 
             return { deleted: true, name: existing.name };
           }
@@ -207,6 +255,15 @@ export function createAccountManageTool({
               currency: fromAccount.currency,
               userId
             });
+
+            try {
+              await warmPortfolioCache({
+                portfolioSnapshotService,
+                redisCacheService,
+                userService,
+                userId
+              });
+            } catch {}
 
             return {
               from: fromAccount.name,

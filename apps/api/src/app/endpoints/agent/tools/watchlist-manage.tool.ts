@@ -14,6 +14,10 @@ export function createWatchlistManageTool({
   return tool({
     description:
       "Manage the user's watchlist of tracked securities. Add symbols to watch their price trends and market conditions, remove symbols no longer of interest, or list the current watchlist with performance data.",
+    needsApproval:
+      process.env.SKIP_APPROVAL === 'true'
+        ? false
+        : (input) => input.action !== 'list',
     inputSchema: z.object({
       action: z
         .enum(['add', 'remove', 'list'])

@@ -20,7 +20,7 @@ import {
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
-import type { UIMessage } from 'ai';
+import { pipeAgentUIStreamToResponse, type UIMessage } from 'ai';
 import type { Response } from 'express';
 import { AgentFeedbackService } from './agent-feedback.service';
 import { AgentMetricsService } from './agent-metrics.service';
@@ -44,18 +44,27 @@ export class AgentController {
   @UseGuards(AuthGuard('jwt'), HasPermissionGuard)
   public async chat(
     @Body()
-    body: { messages: UIMessage[]; toolHistory?: string[]; model?: string },
+    body: {
+      messages: UIMessage[];
+      toolHistory?: string[];
+      model?: string;
+      approvedActions?: string[];
+    },
     @Res() res: Response
   ) {
     try {
-      const { result, requestId } = await this.agentService.chat({
+      const { agent, requestId } = await this.agentService.chat({
+        approvedActions: body.approvedActions,
         messages: body.messages,
         toolHistory: body.toolHistory,
         model: body.model,
         userId: this.request.user.id
       });
 
-      result.pipeUIMessageStreamToResponse(res, {
+      await pipeAgentUIStreamToResponse({
+        response: res,
+        agent,
+        uiMessages: body.messages,
         messageMetadata: ({ part }) => {
           if (part.type === 'finish') {
             return { requestId };
